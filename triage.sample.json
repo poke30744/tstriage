@@ -1,0 +1,121 @@
+{
+    "Uncategoried": "\\\\raspberrypi4\\BUFFALO_Exp\\recorded",
+    "Categorized": "\\\\raspberrypi4\\BUFFALO_Exp\\categorized",
+    "Destination": "\\\\raspberrypi4\\BUFFALO_Exp\\categorized_no_cm",
+    "Cache": "~/Desktop/workingFolder2",
+    "NewerThan": 500,
+    "MaxFilesToProcess": 10,        
+    "Groups": {
+        "Drama": {
+            "Keywords": [
+                "ほんとにあった怖い話",
+                "New"
+            ],
+            "Cutter": {},
+            "Marker": {},
+            "Encoder": {
+                "preset": "drama"
+            }
+        },
+        "MorningDrama": {
+            "Keywords": [
+                "純情きらり"
+            ],
+            "Marker": null,
+            "Encoder": {
+                "preset": "drama",
+                "cropdetect": true
+            }
+        },
+        "Anime": {
+            "Keywords": [
+                "ドラえもん",
+                "名探偵コナン",
+                "おしりたんてい",
+                "進撃の巨人",
+                "ふしぎ駄菓子屋 銭天堂",
+                "ゲゲゲの鬼太郎(第6作)",
+                "ルパン三世 映画",
+                "美少女戦士セーラームーンCrystal"
+            ],
+            "Encoder": {
+                "preset": "anime"
+            }
+        },
+        "OldAnimeHD": {
+            "Keywords": [
+                "銀河英雄伝説 外伝(BD版)",
+                "ルパン三世 PARTⅢ【HD】"
+            ],
+            "Encoder": {
+                "preset": "anime720p",
+                "cropdetect": true
+            }
+        },
+        "OldAnime": {
+            "Keywords": [
+                "美少女戦士セーラームーンS",
+                "ゲゲゲの鬼太郎(1996)"
+            ],
+            "Encoder": {
+                "preset": "anime480p",
+                "cropdetect": true
+            }
+        },
+        "OldAnime2": {
+            "Keywords": [
+                "ルパン三世  PARTⅡ[S]"
+            ],
+            "Cutter": {
+                "minSilenceLen": 500
+            },
+            "Encoder": {
+                "preset": "anime480p",
+                "cropdetect": true
+            }
+        },
+        "VarietyNHK": {
+            "Keywords": [
+                "チコちゃんに叱られる"
+            ],
+            "Marker": null,
+            "Encoder": {
+                "preset": "drama"
+            }
+        },
+        "Variety": {
+            "Keywords": [
+                "小学5年より賢い",
+                "大改造!!劇的ビフォーアフター"
+            ],
+            "Encoder": {
+                "preset": "drama"
+            }
+        },
+        "Sports": {
+            "Keywords": [
+                "スポーツ"
+            ],
+            "Encoder": {
+                "preset": "drama"
+            }
+        },
+        "Movie": {
+            "Keywords": [
+                "映画"
+            ],
+            "Encoder": {
+                "preset": "drama"
+            }
+        },
+        "MovieSat": {
+            "Keywords": [
+                "映画（衛星）"
+            ],
+            "Marker": null,
+            "Encoder": {
+                "preset": "drama"
+            }
+        }
+    }
+}

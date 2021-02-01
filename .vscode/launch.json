@@ -1,0 +1,72 @@
+{
+    // Use IntelliSense to learn about possible attributes.
+    // Hover to view descriptions of existing attributes.
+    // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "runner -t categorize",
+            "type": "python",
+            "request": "launch",
+            "module": "tstriage.runner",
+            "args": [
+                "-c", "triage.sample.json",
+                "-t", "categorize"
+            ]
+        },
+        {
+            "name": "runner -t list",
+            "type": "python",
+            "request": "launch",
+            "module": "tstriage.runner",
+            "args": [
+                "-c", "triage.sample.json",
+                "-t", "list"
+            ]
+        },
+        {
+            "name": "runner -t mark",
+            "type": "python",
+            "request": "launch",
+            "justMyCode": false,
+            "module": "tstriage.runner",
+            "args": [
+                "-c", "triage.sample.json",
+                "-t", "mark"
+            ]
+        },
+        {
+            "name": "runner -t confirm",
+            "type": "python",
+            "request": "launch",
+            "justMyCode": false,
+            "module": "tstriage.runner",
+            "args": [
+                "-c", "triage.sample.json",
+                "-t", "confirm"
+            ]
+        },
+        {
+            "name": "runner -t encode",
+            "type": "python",
+            "request": "launch",
+            "justMyCode": false,
+            "module": "tstriage.runner",
+            "args": [
+                "-c", "triage.sample.json",
+                "-t", "encode"
+            ]
+        },
+        {
+            "name": "runner -t cleanup",
+            "type": "python",
+            "request": "launch",
+            "justMyCode": false,
+            "module": "tstriage.runner",
+            "args": [
+                "-c", "triage.sample.json",
+                "-t", "cleanup"
+            ]
+        }
+    ]
+}
