@@ -168,7 +168,7 @@ def Encode(queue):
 
         print('Encoding TS ...', file=sys.stderr)
         preset = item['encoder']['preset']
-        cropdetect = item.get('cropdetect')
+        cropdetect = item['encoder'].get('cropdetect')
         #encodedPath = EncodeTS(strippedTsPath, preset, cropdetect, 'hevc', 22, strippedTsPath.with_suffix('.mp4'))
         encodedPath = tsutils.encode.EncodeTS(strippedTsPath, preset, cropdetect, 'h264_nvenc', 19, strippedTsPath.with_suffix('.mp4'))
 
