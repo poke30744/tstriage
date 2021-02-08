@@ -21,7 +21,7 @@ class WindowsInhibitor:
         print("Allowing Windows to go to sleep", file=sys.stderr)
         ctypes.windll.kernel32.SetThreadExecutionState(WindowsInhibitor.ES_CONTINUOUS)
     
-def CopyWithProgressInternal(srcPath, dstPath, force=False):
+def CopyWithProgress(srcPath, dstPath, force=False):
     srcPath, dstPath = Path(srcPath), Path(dstPath)
     if not force and dstPath.is_file() and srcPath.stat().st_size == dstPath.stat().st_size and round(srcPath.stat().st_mtime) == round(dstPath.stat().st_mtime):
         print(f'Skipped copying {srcPath.name}', file=sys.stderr)
@@ -39,19 +39,6 @@ def CopyWithProgressInternal(srcPath, dstPath, force=False):
                     pbar.update(len(buf))
                     remaining -= len(buf)
     shutil.copystat(srcPath, dstPath)
-
-def CopyWithProgress(srcPath, dstPath, force=False):
-    retryLimit = 3
-    retryWait = 30
-    for i in range(retryLimit + 1):
-        try:
-            CopyWithProgressInternal(srcPath, dstPath, force)
-        except OSError as err:
-            print(f'OS error: {err}')
-            print(f'Retry {i}/{retryLimit} in {30} seconds ...')
-            time.sleep(retryWait)
-        else:
-            break
 
 def ExtractProgram(videoPath, indexPath, markerPath):
     ptsMap, markerMap = LoadExistingData(indexPath, markerPath)
