@@ -84,7 +84,7 @@ def Mark(queue):
             videoPath=trimmedPath,
             indexPath=None,
             markerPath=None,
-            methods=['subtitles', 'clipinfo'])
+            methods=['subtitles', 'clipinfo', 'logo'])
 
         # create the dataset
         outputFolder = Path(item['destination'])
@@ -94,13 +94,7 @@ def Mark(queue):
             tsmarker.ensemble.CreateDataset(
                 folder=outputFolder, 
                 csvPath=datasetCsv, 
-                properties=[ 'subtitles', 'position', 'duration', 'duration_prev', 'duration_next'])
-        elif len(os.listdir(outputFolder.parent)) > 0:
-            datasetCsv = Path(outputFolder.parent.with_suffix('.csv').name)
-            tsmarker.ensemble.CreateDataset(
-                folder=outputFolder.parent, 
-                csvPath=datasetCsv, 
-                properties=[ 'subtitles', 'position', 'duration', 'duration_prev', 'duration_next'])
+                properties=[ 'subtitles', 'position', 'duration', 'duration_prev', 'duration_next', 'logo'])
         else:
             byEnsemble = False
         
@@ -116,16 +110,14 @@ def Mark(queue):
 
         _, markerMap = tsmarker.common.LoadExistingData(indexPath, markerPath)
         noSubtitles = any([ v['subtitles'] == 0.5 for _, v in markerMap.items() ])
-        
-        _, markerMap = tsmarker.common.LoadExistingData(indexPath, markerPath)
-        if '_groundtruth' in list(markerMap.values())[0]:
-            byMethod = '_groundtruth'
-        elif noSubtitles:
+    
+        print('Cutting CMs ...', file=sys.stderr)
+        if byEnsemble:
             byMethod = '_ensemble'
+        elif noSubtitles:
+            byMethod = 'logo'
         else:
             byMethod = 'subtitles'
-
-        print('Cutting CMs ...', file=sys.stderr)
         _cuttedProgramPath = tsmarker.marker.CutCMs(videoPath=trimmedPath, indexPath=indexPath, markerPath=markerPath, byMethod=byMethod, outputFolder=workingPath.parent / workingPath.stem)
 
 def Confirm(queue):
