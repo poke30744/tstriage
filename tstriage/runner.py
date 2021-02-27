@@ -87,9 +87,10 @@ def Mark(queue):
             methods=['subtitles', 'clipinfo', 'logo'])
 
         # create the dataset
+        noEnsemble = item['marker'].get('noEnsemble', False)
         outputFolder = Path(item['destination'])
-        byEnsemble = True
-        if outputFolder.exists() and len(os.listdir(outputFolder)) > 0:
+        byEnsemble = not noEnsemble
+        if byEnsemble and outputFolder.exists() and len(os.listdir(outputFolder)) > 0:
             datasetCsv = Path(outputFolder.with_suffix('.csv').name)
             tsmarker.ensemble.CreateDataset(
                 folder=outputFolder, 
@@ -149,16 +150,16 @@ def Encode(queue):
         subtitlesPathList = tsutils.subtitles.Extract(programTsPath)
         subtitlesPathList = [ path.replace(path.with_name(path.name.replace('_prog.', '_prog.jpn.'))) for path in subtitlesPathList ]
     
-        print('Striping TS ...', file=sys.stderr)
         if item.get('encoder', {}).get('repack', False):
-            print('Striping and repack TS ...', file=sys.stderr)
             strippedTsPath = tsutils.encode.StripAndRepackTS(programTsPath)
         else:
-            print('Striping TS ...', file=sys.stderr)
-            strippedTsPath = tsutils.encode.StripTS(programTsPath)
+            try:
+                strippedTsPath = tsutils.encode.StripTS(programTsPath)
+            except tsutils.common.EncodingError:
+                print('Striping failed, trying to fix audio and strip ...', file=sys.stderr)
+                strippedTsPath = tsutils.encode.StripTS(programTsPath, fixAudio=True)
         programTsPath.unlink()
 
-        print('Encoding TS ...', file=sys.stderr)
         preset = item['encoder']['preset']
         cropdetect = item['encoder'].get('cropdetect')
         #encodedPath = EncodeTS(strippedTsPath, preset, cropdetect, 'hevc', 22, strippedTsPath.with_suffix('.mp4'))
