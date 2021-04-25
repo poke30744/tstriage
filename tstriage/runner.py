@@ -90,7 +90,7 @@ def Mark(queue):
         noEnsemble = item['marker'].get('noEnsemble', False)
         outputFolder = Path(item['destination'])
         byEnsemble = not noEnsemble
-        if byEnsemble and outputFolder.exists() and len(os.listdir(outputFolder)) > 0:
+        if byEnsemble and (outputFolder / '_metadata').exists() and len(os.listdir(outputFolder / '_metadata')) > 0:
             datasetCsv = Path(outputFolder.with_suffix('.csv').name)
             tsmarker.ensemble.CreateDataset(
                 folder=outputFolder, 
