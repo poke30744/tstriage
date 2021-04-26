@@ -235,6 +235,5 @@ if __name__ == "__main__":
                 with path.open(encoding='utf-8') as f:
                     item = json.load(f)
                 Cleanup(item=item)
-                path.unlink()
 
     WindowsInhibitor.uninhibit()
