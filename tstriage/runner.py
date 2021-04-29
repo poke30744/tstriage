@@ -159,8 +159,8 @@ def Encode(item):
             try:
                 strippedTsPath = tsutils.encode.StripTS(programTsPath, fixAudio=True)
             except tsutils.common.EncodingError:
-                print('Striping failed again, trying to strip and repack ...', file=sys.stderr)
-                strippedTsPath = tsutils.encode.StripAndRepackTS(programTsPath)
+                print('Striping failed again, trying to strip without mapping ...', file=sys.stderr)
+                strippedTsPath = tsutils.encode.StripTS(programTsPath, nomap=True)
     programTsPath.unlink()
 
     preset = item['encoder']['preset']
