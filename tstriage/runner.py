@@ -156,7 +156,11 @@ def Encode(item):
             strippedTsPath = tsutils.encode.StripTS(programTsPath)
         except tsutils.common.EncodingError:
             print('Striping failed, trying to fix audio and strip ...', file=sys.stderr)
-            strippedTsPath = tsutils.encode.StripTS(programTsPath, fixAudio=True)
+            try:
+                strippedTsPath = tsutils.encode.StripTS(programTsPath, fixAudio=True)
+            except tsutils.common.EncodingError:
+                print('Striping failed again, trying to strip and repack ...', file=sys.stderr)
+                strippedTsPath = tsutils.encode.StripAndRepackTS(programTsPath)
     programTsPath.unlink()
 
     preset = item['encoder']['preset']
