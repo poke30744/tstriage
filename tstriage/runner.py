@@ -2,6 +2,7 @@
 import argparse, json, shutil, sys, pickle, time, os
 from pathlib import Path
 from datetime import datetime, timedelta
+import urllib.request
 import tsutils.splitter
 import tsutils.epg
 import tsutils.encode
@@ -11,25 +12,61 @@ import tsmarker.ensemble
 import tsmarker.common
 from .common import CopyWithProgress, WindowsInhibitor, ExtractProgram
 
-def Categorize(configuration):
+class EPGStation:
+    def __init__(self, url, cache=None):
+        self.url = url
+        self.reservesJsonPath = Path('reserves.json') if cache is None else Path(cache).expanduser() / 'reserves.json'
+        self._notBusyTill = None
+    
+    def LoadReservesList(self):
+        if self.reservesJsonPath.exists():
+            lastModifiedTime = datetime.fromtimestamp(self.reservesJsonPath.stat().st_mtime)
+            if datetime.now() - lastModifiedTime > timedelta(hours=8):
+                self.reservesJsonPath.unlink()
+        if not self.reservesJsonPath.exists():
+            with urllib.request.urlopen(f'{self.url}/api/reserves') as response:
+                with self.reservesJsonPath.open('wb') as f:
+                    shutil.copyfileobj(response, f)
+        with self.reservesJsonPath.open() as f:
+            return json.load(f)['reserves']
+
+    def IsBusy(self, at=None, duration=None):
+        at = datetime.now() if at is None else at
+        duration = timedelta(minutes=30) if duration is None else duration    
+        for item in self.LoadReservesList():
+            startAt = datetime.fromtimestamp(item['program']['startAt'] / 1000)
+            endAt = datetime.fromtimestamp(item['program']['endAt'] / 1000)
+            if startAt <= at <= endAt or startAt <= (at + duration) <= endAt:
+                return True
+        return False
+    
+    def BusyWait(self, granularity=30):
+        if self._notBusyTill is None or self._notBusyTill < datetime.now():
+            duration = granularity * 2
+            while self.IsBusy(duration=timedelta(seconds=duration)):
+                time.sleep(duration)
+            self._notBusyTill = datetime.now() + timedelta(seconds=granularity)
+
+def Categorize(configuration, epgStation=None):
+    if epgStation is not None:
+        epgStation.BusyWait()
     # categorize files by folder names in the destination
     categories = [ path.name for path in Path(configuration['Categorized']).glob('*') if path.is_dir() ]
     filesMoved = []
     for path in Path(configuration['Uncategoried']).glob('*.ts'):
-        modifiedTime = datetime.fromtimestamp(path.stat().st_mtime)
-        if datetime.now() - modifiedTime > timedelta(minutes=10):
-            # default category
-            fileCategory = '_Unknown'
-            for category in categories:
-                if category in path.stem:
-                    fileCategory = category
-                    break
-            newPath = Path(str(path).replace(str(path.parent), str(Path(configuration['Categorized']) / fileCategory)))
-            shutil.move(path, newPath)
-            filesMoved.append(newPath)
+        fileCategory = '_Unknown' # default category
+        for category in categories:
+            if category in path.stem:
+                fileCategory = category
+                break
+        newPath = Path(str(path).replace(str(path.parent), str(Path(configuration['Categorized']) / fileCategory)))
+        shutil.move(path, newPath)
+        filesMoved.append(newPath)
     return filesMoved
 
-def List(configuration):
+def List(configuration, epgStation=None):
+    if epgStation is not None:
+        epgStation.BusyWait()
     categorized = Path(configuration['Categorized'])
     cache = Path(configuration['Cache']).expanduser()
     destination = Path(configuration['Destination'])
@@ -54,23 +91,20 @@ def List(configuration):
         if all([ item['path'].stem not in filename for filename in processedFilenames ]):
             item['path'] = str(item['path'])
             filesToProcess.append(item)
-    maxFilesToProcess = configuration['MaxFilesToProcess']
-    if len(filesToProcess) > maxFilesToProcess:
-        filesToProcess = filesToProcess[:maxFilesToProcess]
-    if filesToProcess is not []:
+    if len(filesToProcess) > 0:
         print('Files to process:', file=sys.stderr)
         for item in filesToProcess:
             print(item['path'], file=sys.stderr)
     return filesToProcess
 
-def Mark(item):
+def Mark(item, epgStation):
     path = Path(item['path'])
     cache = Path(item['cache']).expanduser()
     print('Copying TS file to working folder ...', file=sys.stderr)
     workingPath = cache / path.name
     trimmedPath = cache / path.name.replace('.ts', '_trimmed.ts')
     if not trimmedPath.exists():
-        CopyWithProgress(path, workingPath)
+        CopyWithProgress(path, workingPath, epgStation=epgStation)
         print('Trimming original TS ...', file=sys.stderr)
         trimmedPath = tsutils.splitter.Trim(videoPath=workingPath, outputPath=trimmedPath)
         workingPath.unlink()
@@ -130,9 +164,12 @@ def Confirm(item):
     print(f'Marking ground truth for {workingPath.name} ...', file=sys.stderr)
     cuttedProgramFolder = cache / path.stem
     markerPath = cache / '_metadata' / (workingPath.stem + '.markermap')
+    oldTime = markerPath.stat().st_mtime
     tsmarker.marker.MarkGroundTruth(clipsFolder=cuttedProgramFolder, markerPath=markerPath)
+    newTime = markerPath.stat().st_mtime
+    return oldTime == newTime
 
-def Encode(item):
+def Encode(item, epgStation):
     path = Path(item['path'])
     cache = Path(item['cache']).expanduser()
     workingPath = cache / path.name.replace('.ts', '_trimmed.ts')
@@ -170,14 +207,14 @@ def Encode(item):
 
     print('Uploading processed files ...', file=sys.stderr)
     destination = Path(item['destination'])
-    CopyWithProgress(encodedPath, destination / encodedPath.name.replace('_stripped', ''))
-    CopyWithProgress(indexPath, destination / '_metadata' / Path(indexPath.name), force=True)
-    CopyWithProgress(markerPath, destination / '_metadata' / Path(markerPath.name), force=True)
-    CopyWithProgress(epgPath, destination / 'EPG' / Path(epgPath.name), force=True)
-    CopyWithProgress(txtPath, destination / Path(txtPath.name), force=True)
+    CopyWithProgress(encodedPath, destination / encodedPath.name.replace('_stripped', ''), epgStation=epgStation)
+    CopyWithProgress(indexPath, destination / '_metadata' / Path(indexPath.name), force=True, epgStation=epgStation)
+    CopyWithProgress(markerPath, destination / '_metadata' / Path(markerPath.name), force=True, epgStation=epgStation)
+    CopyWithProgress(epgPath, destination / 'EPG' / Path(epgPath.name), force=True, epgStation=epgStation)
+    CopyWithProgress(txtPath, destination / Path(txtPath.name), force=True, epgStation=epgStation)
     if subtitlesPathList:
         for path in subtitlesPathList:
-            CopyWithProgress(path, destination / Path('Subtitles') / Path(path.name), force=True)
+            CopyWithProgress(path, destination / Path('Subtitles') / Path(path.name), force=True, epgStation=epgStation)
 
 def Cleanup(item):
     print('Cleaning up ...', file=sys.stderr)
@@ -195,7 +232,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Python script to triage TS files')
     parser.add_argument('--config', '-c', required=True, help='configuration file path')
     parser.add_argument('--task', '-t', required=True, nargs='+', choices=['categorize', 'list', 'mark', 'confirm', 'encode', 'cleanup'], help='tasks to run')
-    parser.add_argument('--daemon', '-d', help='keep running')
+    parser.add_argument('--daemon', '-d', type=int, help='keep running')
 
     args = parser.parse_args()
 
@@ -207,37 +244,61 @@ if __name__ == "__main__":
         cache = Path(configuration['Cache']).expanduser()
         cache.mkdir(parents=True, exist_ok=True)
     
-    for task in args.task:
-        if task == 'categorize':
-            Categorize(configuration)
-        elif task == 'list':
-            queue = List(configuration)
-            for item in queue:
-                itemPath = cache / (Path(item['path']).stem + '.tomark')
-                with itemPath.open('w', encoding='utf-8') as f:
-                    json.dump(item, f, ensure_ascii=False, indent=True)
-        elif task == 'mark':
-            for path in cache.glob('*.tomark'):
-                with path.open(encoding='utf-8') as f:
-                    item = json.load(f)
-                Mark(item=item)
-                path.rename(path.with_suffix('.toconfirm'))
-        elif task == 'confirm':
-            for path in cache.glob('*.toconfirm'):
-                with path.open(encoding='utf-8') as f:
-                    item = json.load(f)
-                Confirm(item=item)
-                path.rename(path.with_suffix('.toencode'))
-        elif task == 'encode':
-            for path in cache.glob('*.toencode'):
-                with path.open(encoding='utf-8') as f:
-                    item = json.load(f)
-                Encode(item=item)
-                path.rename(path.with_suffix('.tocleanup'))
-        elif task == 'cleanup':
-            for path in cache.glob('*.tocleanup'):
-                with path.open(encoding='utf-8') as f:
-                    item = json.load(f)
-                Cleanup(item=item)
+    epgStation = EPGStation(url=configuration['EPGStation'], cache=configuration['Cache'])
+    while True:
+        for task in args.task:
+            if task == 'categorize':
+                Categorize(configuration, epgStation)
+            elif task == 'list':
+                existingWorkItemPathList = []
+                for pattern in ('*.tomark', '*.toconfirm', '*.toconfirm', '*.toencode', '*.tocleanup'):
+                    for path in cache.glob(pattern):
+                        with Path(path).open() as f:
+                            item = json.load(f)
+                        existingWorkItemPathList.append(item['path'])
+                queue = List(configuration, epgStation)
+                newItemQueue = []
+                for item in queue:
+                    if item['path'] not in existingWorkItemPathList:
+                        newItemQueue.append(item)
+                maxFilesToProcess = configuration['MaxFilesToProcess']
+                existingSeats = maxFilesToProcess - len(existingWorkItemPathList)
+                if len(newItemQueue) > existingSeats:
+                    newItemQueue = newItemQueue[:existingSeats]
+                for item in newItemQueue:
+                    itemPath = cache / (Path(item['path']).stem + '.tomark')
+                    with itemPath.open('w', encoding='utf-8') as f:
+                        json.dump(item, f, ensure_ascii=False, indent=True)
+            elif task == 'mark':
+                for path in cache.glob('*.tomark'):
+                    with path.open(encoding='utf-8') as f:
+                        item = json.load(f)
+                    Mark(item=item, epgStation=epgStation)
+                    path.rename(path.with_suffix('.toencode'))
+            elif task == 'encode':
+                for path in cache.glob('*.toencode'):
+                    with path.open(encoding='utf-8') as f:
+                        item = json.load(f)
+                    Encode(item=item, epgStation=epgStation)
+                    path.rename(path.with_suffix('.toconfirm'))
+            elif task == 'confirm':
+                for path in cache.glob('*.toconfirm'):
+                    with path.open(encoding='utf-8') as f:
+                        item = json.load(f)
+                    if Confirm(item=item):
+                        path.rename(path.with_suffix('.tocleanup'))
+                    else:
+                        path.rename(path.with_suffix('.toencode'))
+            elif task == 'cleanup':
+                for path in cache.glob('*.tocleanup'):
+                    with path.open(encoding='utf-8') as f:
+                        item = json.load(f)
+                    Cleanup(item=item)
+
+        if args.daemon is None:
+            break
+        else:
+            print(f'.{args.daemon}.', end="")
+            time.sleep(args.daemon)
 
     WindowsInhibitor.uninhibit()

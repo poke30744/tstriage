@@ -21,7 +21,7 @@ class WindowsInhibitor:
         print("Allowing Windows to go to sleep", file=sys.stderr)
         ctypes.windll.kernel32.SetThreadExecutionState(WindowsInhibitor.ES_CONTINUOUS)
     
-def CopyWithProgress(srcPath, dstPath, force=False):
+def CopyWithProgress(srcPath, dstPath, force=False, epgStation=None):
     srcPath, dstPath = Path(srcPath), Path(dstPath)
     if not force and dstPath.is_file() and srcPath.stat().st_size == dstPath.stat().st_size and round(srcPath.stat().st_mtime) == round(dstPath.stat().st_mtime):
         print(f'Skipped copying {srcPath.name}', file=sys.stderr)
@@ -34,6 +34,8 @@ def CopyWithProgress(srcPath, dstPath, force=False):
             with tqdm(total=srcPath.stat().st_size, unit_scale=True, unit='M') as pbar:
                 remaining = srcPath.stat().st_size
                 while remaining:
+                    if epgStation is not None:
+                        epgStation.BusyWait()
                     buf = rf.read(1024 * 1024)
                     wf.write(buf)
                     pbar.update(len(buf))
@@ -42,7 +44,11 @@ def CopyWithProgress(srcPath, dstPath, force=False):
 
 def ExtractProgram(videoPath, indexPath, markerPath):
     ptsMap, markerMap = LoadExistingData(indexPath, markerPath)
-    clips = [ eval(k) for k, v in markerMap.items() if v['_groundtruth'] == 1.0 ]
+    # split by _groundtruth or _ensemble
+    if '_groundtruth' in list(markerMap.values())[0]:
+        clips = [ eval(k) for k, v in markerMap.items() if v['_groundtruth'] == 1.0 ]
+    else:
+        clips = [ eval(k) for k, v in markerMap.items() if v['_ensemble'] == 1.0 ]
     # merge neighbor clips
     mergedClips = []
     for clip in clips:
