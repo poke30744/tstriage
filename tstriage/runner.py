@@ -188,6 +188,8 @@ def Encode(item, epgStation):
 
     if item.get('encoder', {}).get('repack', False):
         strippedTsPath = tsutils.encode.StripAndRepackTS(programTsPath)
+    elif item.get('encoder', {}).get('fixaudio', False):
+        strippedTsPath = tsutils.encode.StripTS(programTsPath, fixAudio=True)
     else:
         try:
             strippedTsPath = tsutils.encode.StripTS(programTsPath)
