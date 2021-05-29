@@ -181,6 +181,8 @@ def Encode(item, epgStation):
     indexPath = cache / '_metadata' / (workingPath.stem + '.ptsmap')
     markerPath = cache / '_metadata' / (workingPath.stem + '.markermap')
     programTsPath = ExtractProgram(videoPath=workingPath, indexPath=indexPath, markerPath=markerPath)
+    if not programTsPath.exists():
+        return
 
     print('Extracting subtitles ...', file=sys.stderr)
     subtitlesPathList = tsutils.subtitles.Extract(programTsPath)
