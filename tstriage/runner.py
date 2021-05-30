@@ -190,18 +190,12 @@ def Encode(item, epgStation):
 
     if item.get('encoder', {}).get('repack', False):
         strippedTsPath = tsutils.encode.StripAndRepackTS(programTsPath)
-    elif item.get('encoder', {}).get('fixaudio', False):
-        strippedTsPath = tsutils.encode.StripTS(programTsPath, fixAudio=True)
     else:
         try:
-            strippedTsPath = tsutils.encode.StripTS(programTsPath)
+            strippedTsPath = tsutils.encode.StripTS(programTsPath, fixAudio=True)
         except tsutils.common.EncodingError:
-            print('Striping failed, trying to fix audio and strip ...', file=sys.stderr)
-            try:
-                strippedTsPath = tsutils.encode.StripTS(programTsPath, fixAudio=True)
-            except tsutils.common.EncodingError:
-                print('Striping failed again, trying to strip without mapping ...', file=sys.stderr)
-                strippedTsPath = tsutils.encode.StripTS(programTsPath, nomap=True)
+            print('Striping failed again, trying to strip without mapping ...', file=sys.stderr)
+            strippedTsPath = tsutils.encode.StripTS(programTsPath, nomap=True)
     programTsPath.unlink()
 
     preset = item['encoder']['preset']
