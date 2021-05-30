@@ -49,7 +49,7 @@ def ExtractProgram(videoPath, indexPath, markerPath):
         clips = [ eval(k) for k, v in markerMap.items() if v['_groundtruth'] == 1.0 ]
     elif '_ensemble' in list(markerMap.values())[0]:
         clips = [ eval(k) for k, v in markerMap.items() if v['_ensemble'] == 1.0 ]
-    elif 'subtitles' in list(markerMap.values())[0]:
+    elif 'subtitles' in list(markerMap.values())[0] and list(markerMap.values())[0]['subtitles'] != 0.5:
         clips = [ eval(k) for k, v in markerMap.items() if v['subtitles'] == 1.0 ]
     else:
         clips = [ eval(k) for k, v in markerMap.items() if v['logo'] > 0.5 ]
