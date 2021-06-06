@@ -75,4 +75,4 @@ def ExtractProgram(videoPath, indexPath, markerPath, byGroup):
             programTsPath = videoPath.with_name(videoPath.name.replace('.ts', f'_prog.ts'))
         CopyPart(videoPath, programTsPath, start, end, mode='ab')
         programTsList.append(programTsPath)
-    return programTsList
+    return list(set(programTsList))
