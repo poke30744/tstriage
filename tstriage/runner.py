@@ -180,39 +180,39 @@ def Encode(item, epgStation):
     print('Extracting program from TS ...', file=sys.stderr)
     indexPath = cache / '_metadata' / (workingPath.stem + '.ptsmap')
     markerPath = cache / '_metadata' / (workingPath.stem + '.markermap')
-    programTsPath = ExtractProgram(videoPath=workingPath, indexPath=indexPath, markerPath=markerPath)
-    if not programTsPath.exists():
-        return
 
-    print('Extracting subtitles ...', file=sys.stderr)
-    subtitlesPathList = tsutils.subtitles.Extract(programTsPath)
-    subtitlesPathList = [ path.replace(path.with_name(path.name.replace('_prog.', '_prog.jpn.'))) for path in subtitlesPathList ]
+    byGroup = item.get('encoder', {}).get('bygroup', False)
+    programTsList = ExtractProgram(videoPath=workingPath, indexPath=indexPath, markerPath=markerPath, byGroup=byGroup)
+    for programTsPath in programTsList:
+        print('Extracting subtitles ...', file=sys.stderr)
+        subtitlesPathList = tsutils.subtitles.Extract(programTsPath)
+        subtitlesPathList = [ path.replace(path.with_name(path.name.replace('_prog.', '_prog.jpn.'))) for path in subtitlesPathList ]
 
-    if item.get('encoder', {}).get('repack', False):
-        strippedTsPath = tsutils.encode.StripAndRepackTS(programTsPath)
-    else:
-        try:
-            strippedTsPath = tsutils.encode.StripTS(programTsPath, fixAudio=True)
-        except tsutils.common.EncodingError:
-            print('Striping failed again, trying to strip without mapping ...', file=sys.stderr)
-            strippedTsPath = tsutils.encode.StripTS(programTsPath, nomap=True)
-    programTsPath.unlink()
+        if item.get('encoder', {}).get('repack', False):
+            strippedTsPath = tsutils.encode.StripAndRepackTS(programTsPath)
+        else:
+            try:
+                strippedTsPath = tsutils.encode.StripTS(programTsPath, fixAudio=True)
+            except tsutils.common.EncodingError:
+                print('Striping failed again, trying to strip without mapping ...', file=sys.stderr)
+                strippedTsPath = tsutils.encode.StripTS(programTsPath, nomap=True)
+        programTsPath.unlink()
 
-    preset = item['encoder']['preset']
-    cropdetect = item['encoder'].get('cropdetect')
-    #encodedPath = EncodeTS(strippedTsPath, preset, cropdetect, 'hevc', 22, strippedTsPath.with_suffix('.mp4'))
-    encodedPath = tsutils.encode.EncodeTS(strippedTsPath, preset, cropdetect, 'h264_nvenc', 19, strippedTsPath.with_suffix('.mp4'))
+        preset = item['encoder']['preset']
+        cropdetect = item['encoder'].get('cropdetect')
+        #encodedPath = EncodeTS(strippedTsPath, preset, cropdetect, 'hevc', 22, strippedTsPath.with_suffix('.mp4'))
+        encodedPath = tsutils.encode.EncodeTS(strippedTsPath, preset, cropdetect, 'h264_nvenc', 19, strippedTsPath.with_suffix('.mp4'))
 
-    print('Uploading processed files ...', file=sys.stderr)
-    destination = Path(item['destination'])
-    CopyWithProgress(encodedPath, destination / encodedPath.name.replace('_stripped', ''), epgStation=epgStation)
-    CopyWithProgress(indexPath, destination / '_metadata' / Path(indexPath.name), force=True, epgStation=epgStation)
-    CopyWithProgress(markerPath, destination / '_metadata' / Path(markerPath.name), force=True, epgStation=epgStation)
-    CopyWithProgress(epgPath, destination / 'EPG' / Path(epgPath.name), force=True, epgStation=epgStation)
-    CopyWithProgress(txtPath, destination / Path(txtPath.name), force=True, epgStation=epgStation)
-    if subtitlesPathList:
-        for path in subtitlesPathList:
-            CopyWithProgress(path, destination / Path('Subtitles') / Path(path.name), force=True, epgStation=epgStation)
+        print('Uploading processed files ...', file=sys.stderr)
+        destination = Path(item['destination'])
+        CopyWithProgress(encodedPath, destination / encodedPath.name.replace('_stripped', ''), epgStation=epgStation)
+        CopyWithProgress(indexPath, destination / '_metadata' / Path(indexPath.name), force=True, epgStation=epgStation)
+        CopyWithProgress(markerPath, destination / '_metadata' / Path(markerPath.name), force=True, epgStation=epgStation)
+        CopyWithProgress(epgPath, destination / 'EPG' / Path(epgPath.name), force=True, epgStation=epgStation)
+        CopyWithProgress(txtPath, destination / Path(txtPath.name), force=True, epgStation=epgStation)
+        if subtitlesPathList:
+            for path in subtitlesPathList:
+                CopyWithProgress(path, destination / Path('Subtitles') / Path(path.name), force=True, epgStation=epgStation)
 
 def Cleanup(item):
     print('Cleaning up ...', file=sys.stderr)

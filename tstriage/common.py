@@ -42,7 +42,7 @@ def CopyWithProgress(srcPath, dstPath, force=False, epgStation=None):
                     remaining -= len(buf)
     shutil.copystat(srcPath, dstPath)
 
-def ExtractProgram(videoPath, indexPath, markerPath):
+def ExtractProgram(videoPath, indexPath, markerPath, byGroup):
     ptsMap, markerMap = LoadExistingData(indexPath, markerPath)
     # split by _groundtruth or _ensemble
     if '_groundtruth' in list(markerMap.values())[0]:
@@ -65,10 +65,14 @@ def ExtractProgram(videoPath, indexPath, markerPath):
             else:
                 mergedClips.append(previousClip)
                 mergedClips.append(clip)
-    programTsPath = videoPath.with_name(videoPath.name.replace('.ts', '_prog.ts'))
-    if programTsPath.exists():
-        programTsPath.unlink()
-    for clip in mergedClips:
+    programTsList = []
+    for i in range(len(mergedClips)):
+        clip = mergedClips[i]
         start, end = ptsMap[str(clip[0])]['next_start_pos'], ptsMap[str(clip[1])]['prev_end_pos']
+        if byGroup:
+            programTsPath = videoPath.with_name(videoPath.name.replace('.ts', f'_prog_{i+1}.ts'))
+        else:
+            programTsPath = videoPath.with_name(videoPath.name.replace('.ts', f'_prog.ts'))
         CopyPart(videoPath, programTsPath, start, end, mode='ab')
-    return programTsPath
+        programTsList.append(programTsPath)
+    return programTsList
