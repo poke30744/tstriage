@@ -206,13 +206,13 @@ def Encode(item, epgStation):
         print('Uploading processed files ...', file=sys.stderr)
         destination = Path(item['destination'])
         CopyWithProgress(encodedPath, destination / encodedPath.name.replace('_stripped', ''), epgStation=epgStation)
-        CopyWithProgress(indexPath, destination / '_metadata' / Path(indexPath.name), force=True, epgStation=epgStation)
-        CopyWithProgress(markerPath, destination / '_metadata' / Path(markerPath.name), force=True, epgStation=epgStation)
-        CopyWithProgress(epgPath, destination / 'EPG' / Path(epgPath.name), force=True, epgStation=epgStation)
-        CopyWithProgress(txtPath, destination / Path(txtPath.name), force=True, epgStation=epgStation)
         if subtitlesPathList:
             for path in subtitlesPathList:
                 CopyWithProgress(path, destination / Path('Subtitles') / Path(path.name), force=True, epgStation=epgStation)
+    CopyWithProgress(indexPath, destination / '_metadata' / Path(indexPath.name), force=True, epgStation=epgStation)
+    CopyWithProgress(markerPath, destination / '_metadata' / Path(markerPath.name), force=True, epgStation=epgStation)
+    CopyWithProgress(epgPath, destination / 'EPG' / Path(epgPath.name), force=True, epgStation=epgStation)
+    CopyWithProgress(txtPath, destination / Path(txtPath.name), force=True, epgStation=epgStation)    
 
 def Cleanup(item):
     print('Cleaning up ...', file=sys.stderr)
