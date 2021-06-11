@@ -166,8 +166,11 @@ def Confirm(item):
     markerPath = cache / '_metadata' / (workingPath.stem + '.markermap')
     oldTime = markerPath.stat().st_mtime
     tsmarker.marker.MarkGroundTruth(clipsFolder=cuttedProgramFolder, markerPath=markerPath)
+    destination = Path(item['destination'])
+    CopyWithProgress(markerPath, destination / '_metadata' / Path(markerPath.name), force=True, epgStation=epgStation)
     newTime = markerPath.stat().st_mtime
-    return oldTime == newTime
+    noChanged = (oldTime == newTime)
+    return noChanged
 
 def Encode(item, epgStation):
     path = Path(item['path'])
@@ -210,7 +213,6 @@ def Encode(item, epgStation):
             for path in subtitlesPathList:
                 CopyWithProgress(path, destination / Path('Subtitles') / Path(path.name), force=True, epgStation=epgStation)
     CopyWithProgress(indexPath, destination / '_metadata' / Path(indexPath.name), force=True, epgStation=epgStation)
-    CopyWithProgress(markerPath, destination / '_metadata' / Path(markerPath.name), force=True, epgStation=epgStation)
     CopyWithProgress(epgPath, destination / 'EPG' / Path(epgPath.name), force=True, epgStation=epgStation)
     CopyWithProgress(txtPath, destination / Path(txtPath.name), force=True, epgStation=epgStation)    
 
