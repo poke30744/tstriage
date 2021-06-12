@@ -247,7 +247,8 @@ if __name__ == "__main__":
         cache = Path(configuration['Cache']).expanduser()
         cache.mkdir(parents=True, exist_ok=True)
     
-    epgStation = EPGStation(url=configuration['EPGStation'], cache=configuration['Cache'])
+    epgStation = EPGStation(url=configuration['EPGStation'], cache=configuration['Cache']) if 'EPGStation' in configuration else None
+
     while True:
         for task in args.task:
             if task == 'categorize':
