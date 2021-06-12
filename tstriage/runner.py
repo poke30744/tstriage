@@ -67,6 +67,16 @@ def Categorize(configuration, epgStation=None):
         print(f'categorized: {newPath}')
     return filesMoved
 
+def FindTsTriageSettings(folder):
+    folder = Path(folder)
+    settingsPath = folder / 'tstriage.json'
+    if settingsPath.exists():
+        return settingsPath
+    elif folder == Path('/'):
+        return None
+    else:
+        return FindTsTriageSettings(folder.parent)
+
 def List(configuration, epgStation=None):
     if epgStation is not None:
         epgStation.BusyWait()
@@ -74,31 +84,39 @@ def List(configuration, epgStation=None):
     cache = Path(configuration['Cache']).expanduser()
     destination = Path(configuration['Destination'])
     newerThan = configuration['NewerThan']
-    matchedFiles = []
-    for path in categorized.glob('*/*.ts'): 
+    
+    tsPaths = []
+    for path in categorized.glob('**/*.ts'): 
         modifiedTime = datetime.fromtimestamp(path.stat().st_mtime)
         if datetime.now() - modifiedTime < timedelta(days=newerThan):
-            for _, group in configuration['Groups'].items():
-                if any([ keyword == path.parent.name for keyword in group['Keywords'] ]): 
-                    matchedFiles.append({
-                        'path': path,
-                        'cache': str(cache),
-                        'destination': str(destination / path.parent.stem),
-                        'cutter': group.get('Cutter', {}),
-                        'marker': group.get('Marker', {}),
-                        'encoder': group.get('Encoder', {})
-                    })
-    filesToProcess = []
+            if path.parent.stem != '_Unknown':
+                tsPaths.append(path)
+            
+    tsToProcess = []
     processedFilenames = [ path.name for path in Path(destination).glob('**/*.ts') ] + [ path.name for path in Path(destination).glob('**/*.mp4') ]
-    for item in matchedFiles:
-        if all([ item['path'].stem not in filename for filename in processedFilenames ]):
-            item['path'] = str(item['path'])
-            filesToProcess.append(item)
-    if len(filesToProcess) > 0:
+    for path in tsPaths:
+        if all([ path.stem not in filename for filename in processedFilenames ]):
+            tsToProcess.append(path)
+    
+    itemsToProcess = []
+    for path in tsToProcess:
+        settingsPath = FindTsTriageSettings(path.parent)
+        with settingsPath.open() as f:
+            settings = json.load(f)
+            itemsToProcess.append({
+                'path': str(path),
+                'cache': str(cache),
+                'destination': str(path.parent).replace(str(categorized), str(destination)),
+                'cutter': settings.get('cutter', {}),
+                'marker': settings.get('marker', {}),
+                'encoder': settings.get('encoder', {})
+            })
+
+    if len(itemsToProcess) > 0:
         print('Files to process:', file=sys.stderr)
-        for item in filesToProcess:
+        for item in itemsToProcess:
             print(item['path'], file=sys.stderr)
-    return filesToProcess
+    return itemsToProcess
 
 def Mark(item, epgStation):
     path = Path(item['path'])
