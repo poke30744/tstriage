@@ -51,17 +51,20 @@ def Categorize(configuration, epgStation=None):
     if epgStation is not None:
         epgStation.BusyWait()
     # categorize files by folder names in the destination
-    categories = [ path.name for path in Path(configuration['Categorized']).glob('*') if path.is_dir() ]
+    categoryFolder = [ path for path in Path(configuration['Categorized']).glob('**/*') if path.is_dir() ]
     filesMoved = []
     for path in Path(configuration['Uncategoried']).glob('*.ts'):
-        fileCategory = '_Unknown' # default category
-        for category in categories:
+        newPath = None
+        for folder in categoryFolder:
+            category = folder.name
             if category in path.stem:
-                fileCategory = category
+                newPath = folder / path.name
                 break
-        newPath = Path(str(path).replace(str(path.parent), str(Path(configuration['Categorized']) / fileCategory)))
+        if newPath is None:
+            newPath = Path(configuration['Categorized']) / '_Unknown' / path.name # default category
         shutil.move(path, newPath)
         filesMoved.append(newPath)
+        print(f'categorized: {newPath}')
     return filesMoved
 
 def List(configuration, epgStation=None):
