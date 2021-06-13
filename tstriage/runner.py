@@ -304,13 +304,14 @@ if __name__ == "__main__":
                     Encode(item=item, epgStation=epgStation)
                     path.rename(path.with_suffix('.toconfirm'))
             elif task == 'confirm':
-                for path in cache.glob('*.toconfirm'):
-                    with path.open(encoding='utf-8') as f:
-                        item = json.load(f)
-                    if Confirm(item=item):
-                        path.rename(path.with_suffix('.tocleanup'))
-                    else:
-                        path.rename(path.with_suffix('.toencode'))
+                for pattern in ('*.toconfirm', '*.toencode'):
+                    for path in cache.glob(pattern):
+                        with path.open(encoding='utf-8') as f:
+                            item = json.load(f)
+                        if Confirm(item=item):
+                            path.rename(path.with_suffix('.tocleanup'))
+                        else:
+                            path.rename(path.with_suffix('.toencode'))
             elif task == 'cleanup':
                 for path in cache.glob('*.tocleanup'):
                     with path.open(encoding='utf-8') as f:
