@@ -303,11 +303,11 @@ if __name__ == "__main__":
                     Encode(item=item, epgStation=epgStation)
                     path.rename(path.with_suffix('.toconfirm'))
             elif task == 'confirm':
-                listToConfirm = []
-                for pattern in ('*.toconfirm', '*.toencode'):
-                    for path in cache.glob(pattern):
-                        listToConfirm.append(path)
-                for path in listToConfirm:
+                for path in cache.glob('*.toencode'):
+                    with path.open(encoding='utf-8') as f:
+                        item = json.load(f)
+                    Confirm(item=item)
+                for path in cache.glob('*.toconfirm'):
                     with path.open(encoding='utf-8') as f:
                         item = json.load(f)
                     reEncodingNeeded = Confirm(item=item)
