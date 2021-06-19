@@ -181,17 +181,15 @@ def Confirm(item):
     path = Path(item['path'])
     cache = Path(item['cache']).expanduser()
     workingPath = cache / path.name.replace('.ts', '_trimmed.ts')
-
     print(f'Marking ground truth for {workingPath.name} ...', file=sys.stderr)
     cuttedProgramFolder = cache / path.stem
     markerPath = cache / '_metadata' / (workingPath.stem + '.markermap')
-    oldTime = markerPath.stat().st_mtime
-    tsmarker.marker.MarkGroundTruth(clipsFolder=cuttedProgramFolder, markerPath=markerPath)
+    isReEncodingNeeded = tsmarker.marker.MarkGroundTruth(clipsFolder=cuttedProgramFolder, markerPath=markerPath)
     destination = Path(item['destination'])
     CopyWithProgress(markerPath, destination / '_metadata' / Path(markerPath.name), force=True, epgStation=epgStation)
-    newTime = markerPath.stat().st_mtime
-    noChanged = (oldTime == newTime)
-    return noChanged
+    if isReEncodingNeeded:
+        print("*** Re-encoding is needed! ***")
+    return isReEncodingNeeded
 
 def Encode(item, epgStation):
     path = Path(item['path'])
@@ -308,10 +306,11 @@ if __name__ == "__main__":
                     for path in cache.glob(pattern):
                         with path.open(encoding='utf-8') as f:
                             item = json.load(f)
-                        if Confirm(item=item):
-                            path.rename(path.with_suffix('.tocleanup'))
-                        else:
+                        reEncodingNeeded = Confirm(item=item)
+                        if reEncodingNeeded:
                             path.rename(path.with_suffix('.toencode'))
+                        else:
+                            path.rename(path.with_suffix('.tocleanup'))
             elif task == 'cleanup':
                 for path in cache.glob('*.tocleanup'):
                     with path.open(encoding='utf-8') as f:
