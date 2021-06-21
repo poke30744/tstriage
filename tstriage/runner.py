@@ -170,7 +170,9 @@ def Mark(item, epgStation):
     noSubtitles = any([ v['subtitles'] == 0.5 for _, v in markerMap.items() ])
 
     print('Cutting CMs ...', file=sys.stderr)
-    if byEnsemble:
+    if '_groudtruth' in list(markerMap.items())[0][1]:
+        byMethod = '_groundtruth'
+    elif byEnsemble:
         byMethod = '_ensemble'
     elif noSubtitles:
         byMethod = 'logo'
