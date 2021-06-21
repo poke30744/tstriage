@@ -47,12 +47,16 @@ def ExtractProgram(videoPath, indexPath, markerPath, byGroup):
     # split by _groundtruth or _ensemble
     if '_groundtruth' in list(markerMap.values())[0]:
         clips = [ eval(k) for k, v in markerMap.items() if v['_groundtruth'] == 1.0 ]
+        print('Encoding by _groundtruth ...')
     elif '_ensemble' in list(markerMap.values())[0]:
         clips = [ eval(k) for k, v in markerMap.items() if v['_ensemble'] == 1.0 ]
+        print('Encoding by _ensemble ...')
     elif 'subtitles' in list(markerMap.values())[0] and list(markerMap.values())[0]['subtitles'] != 0.5:
         clips = [ eval(k) for k, v in markerMap.items() if v['subtitles'] == 1.0 ]
+        print('Encoding by subtitles ...')
     else:
         clips = [ eval(k) for k, v in markerMap.items() if v['logo'] > 0.5 ]
+        print('Encoding by logo ...')
     # merge neighbor clips
     mergedClips = []
     for clip in clips:
