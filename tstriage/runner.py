@@ -2,6 +2,7 @@
 import argparse, json, shutil, sys, pickle, time, os
 from pathlib import Path
 from datetime import datetime, timedelta
+import logging
 import urllib.request
 import tsutils.splitter
 import tsutils.epg
@@ -11,6 +12,8 @@ import tsmarker.marker
 import tsmarker.ensemble
 import tsmarker.common
 from .common import CopyWithProgress, WindowsInhibitor, ExtractProgram
+
+logger = logging.getLogger('tstriage.runner')
 
 class EPGStation:
     def __init__(self, url, cache=None):
@@ -65,7 +68,7 @@ def Categorize(configuration, epgStation=None):
             newPath = Path(configuration['Categorized']) / '_Unknown' / path.name # default category
         shutil.move(path, newPath)
         filesMoved.append(newPath)
-        print(f'categorized: {newPath}')
+        logger.info(f'categorized: {newPath}')
     return filesMoved
 
 def FindTsTriageSettings(folder):
@@ -114,29 +117,29 @@ def List(configuration, epgStation=None):
             })
 
     if len(itemsToProcess) > 0:
-        print('Files to process:', file=sys.stderr)
+        logger.info('Files to process:')
         for item in itemsToProcess:
-            print(item['path'], file=sys.stderr)
+            logger.info(item['path'])
     return itemsToProcess
 
 def Mark(item, epgStation):
     path = Path(item['path'])
     cache = Path(item['cache']).expanduser()
-    print('Copying TS file to working folder ...', file=sys.stderr)
+    logger.info('Copying TS file to working folder ...')
     workingPath = cache / path.name
     trimmedPath = cache / path.name.replace('.ts', '_trimmed.ts')
     if not trimmedPath.exists():
         CopyWithProgress(path, workingPath, epgStation=epgStation)
-        print('Trimming original TS ...', file=sys.stderr)
+        logger.info('Trimming original TS ...')
         trimmedPath = tsutils.splitter.Trim(videoPath=workingPath, outputPath=trimmedPath)
         workingPath.unlink()
 
-    print('Analyzing to split ...', file=sys.stderr)
+    logger.info('Analyzing to split ...')
     minSilenceLen = item.get('cutter', {}).get('minSilenceLen', 800)
     silenceThresh =  item.get('cutter', {}).get('silenceThresh', -80)
     indexPath = tscutter.analyze.AnalyzeVideo(videoPath=trimmedPath, silenceThresh=silenceThresh, minSilenceLen=minSilenceLen)
 
-    print('Marking ...', file=sys.stderr)
+    logger.info('Marking ...')
     markerPath = tsmarker.marker.MarkVideo(
         videoPath=trimmedPath,
         indexPath=None,
@@ -169,7 +172,7 @@ def Mark(item, epgStation):
     _, markerMap = tsmarker.common.LoadExistingData(indexPath, markerPath)
     noSubtitles = any([ v['subtitles'] == 0.5 for _, v in markerMap.items() ])
 
-    print('Cutting CMs ...', file=sys.stderr)
+    logger.info('Cutting CMs ...')
     if '_groudtruth' in list(markerMap.items())[0][1]:
         byMethod = '_groundtruth'
     elif byEnsemble:
@@ -184,14 +187,14 @@ def Confirm(item):
     path = Path(item['path'])
     cache = Path(item['cache']).expanduser()
     workingPath = cache / path.name.replace('.ts', '_trimmed.ts')
-    print(f'Marking ground truth for {workingPath.name} ...', file=sys.stderr)
+    logger.info(f'Marking ground truth for {workingPath.name} ...')
     cuttedProgramFolder = cache / path.stem
     markerPath = cache / '_metadata' / (workingPath.stem + '.markermap')
     isReEncodingNeeded = tsmarker.marker.MarkGroundTruth(clipsFolder=cuttedProgramFolder, markerPath=markerPath)
     destination = Path(item['destination'])
     CopyWithProgress(markerPath, destination / '_metadata' / Path(markerPath.name), force=True, epgStation=epgStation)
     if isReEncodingNeeded:
-        print("*** Re-encoding is needed! ***")
+        logger.warning("*** Re-encoding is needed! ***")
     return isReEncodingNeeded
 
 def Encode(item, epgStation):
@@ -199,17 +202,17 @@ def Encode(item, epgStation):
     cache = Path(item['cache']).expanduser()
     workingPath = cache / path.name.replace('.ts', '_trimmed.ts')
 
-    print('Extracting EPG ...', file=sys.stderr)
+    logger.info('Extracting EPG ...')
     epgPath, txtPath = tsutils.epg.Dump(workingPath)
 
-    print('Extracting program from TS ...', file=sys.stderr)
+    logger.info('Extracting program from TS ...')
     indexPath = cache / '_metadata' / (workingPath.stem + '.ptsmap')
     markerPath = cache / '_metadata' / (workingPath.stem + '.markermap')
 
     byGroup = item.get('encoder', {}).get('bygroup', False)
     programTsList = ExtractProgram(videoPath=workingPath, indexPath=indexPath, markerPath=markerPath, byGroup=byGroup)
     for programTsPath in programTsList:
-        print('Extracting subtitles ...', file=sys.stderr)
+        logger.info('Extracting subtitles ...')
         subtitlesPathList = tsutils.subtitles.Extract(programTsPath)
         subtitlesPathList = [ path.replace(path.with_name(path.name.replace('_prog.', '_prog.jpn.'))) for path in subtitlesPathList ]
 
@@ -219,7 +222,7 @@ def Encode(item, epgStation):
             try:
                 strippedTsPath = tsutils.encode.StripTS(programTsPath, fixAudio=True)
             except tsutils.common.EncodingError:
-                print('Striping failed again, trying to strip without mapping ...', file=sys.stderr)
+                logger.info('Striping failed again, trying to strip without mapping ...')
                 strippedTsPath = tsutils.encode.StripTS(programTsPath, nomap=True)
         programTsPath.unlink()
 
@@ -228,7 +231,7 @@ def Encode(item, epgStation):
         #encodedPath = EncodeTS(strippedTsPath, preset, cropdetect, 'hevc', 22, strippedTsPath.with_suffix('.mp4'))
         encodedPath = tsutils.encode.EncodeTS(strippedTsPath, preset, cropdetect, 'h264_nvenc', 19, strippedTsPath.with_suffix('.mp4'))
 
-        print('Uploading processed files ...', file=sys.stderr)
+        logger.info('Uploading processed files ...')
         destination = Path(item['destination'])
         CopyWithProgress(encodedPath, destination / encodedPath.name.replace('_stripped', ''), epgStation=epgStation)
         if subtitlesPathList:
@@ -239,12 +242,12 @@ def Encode(item, epgStation):
     CopyWithProgress(txtPath, destination / Path(txtPath.name), force=True, epgStation=epgStation)    
 
 def Cleanup(item):
-    print('Cleaning up ...', file=sys.stderr)
+    logger.info('Cleaning up ...')
     cache = Path(item['cache'])
     originalPath = Path(item['path'])
     for path in cache.glob('*'):
         if path.stem in originalPath.stem or originalPath.stem in path.stem:
-            print(f'removing {path.name} ...', file=sys.stderr)
+            logger.info(f'removing {path.name} ...')
             if path.is_dir():
                 shutil.rmtree(path)
             elif path.is_file():
@@ -257,6 +260,8 @@ if __name__ == "__main__":
     parser.add_argument('--daemon', '-d', type=int, help='keep running')
 
     args = parser.parse_args()
+
+    logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 
     WindowsInhibitor.inhibit()
 

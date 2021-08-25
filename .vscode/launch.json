@@ -5,13 +5,22 @@
     "version": "0.2.0",
     "configurations": [
         {
+            "name": "Python: Current File",
+            "type": "python",
+            "request": "launch",
+            "program": "${file}",
+            "console": "integratedTerminal"
+        },
+        {
             "name": "runner -t categorize",
             "type": "python",
             "request": "launch",
             "module": "tstriage.runner",
             "args": [
-                "-c", "triage.sample.json",
-                "-t", "categorize"
+                "-c",
+                "triage.sample.json",
+                "-t",
+                "categorize"
             ]
         },
         {
@@ -20,8 +29,10 @@
             "request": "launch",
             "module": "tstriage.runner",
             "args": [
-                "-c", "triage.sample.json",
-                "-t", "list"
+                "-c",
+                "triage.sample.json",
+                "-t",
+                "list"
             ]
         },
         {
@@ -31,8 +42,10 @@
             "justMyCode": false,
             "module": "tstriage.runner",
             "args": [
-                "-c", "triage.sample.json",
-                "-t", "mark"
+                "-c",
+                "triage.sample.json",
+                "-t",
+                "mark"
             ]
         },
         {
@@ -42,8 +55,10 @@
             "justMyCode": false,
             "module": "tstriage.runner",
             "args": [
-                "-c", "triage.sample.json",
-                "-t", "confirm"
+                "-c",
+                "triage.sample.json",
+                "-t",
+                "confirm"
             ]
         },
         {
@@ -53,8 +68,10 @@
             "justMyCode": false,
             "module": "tstriage.runner",
             "args": [
-                "-c", "triage.sample.json",
-                "-t", "encode"
+                "-c",
+                "triage.sample.json",
+                "-t",
+                "encode"
             ]
         },
         {
@@ -64,8 +81,10 @@
             "justMyCode": false,
             "module": "tstriage.runner",
             "args": [
-                "-c", "triage.sample.json",
-                "-t", "cleanup"
+                "-c",
+                "triage.sample.json",
+                "-t",
+                "cleanup"
             ]
         }
     ]
