@@ -8,6 +8,61 @@ from .tasks import Categorize, List, Mark, Encode, Confirm, Cleanup
 
 logger = logging.getLogger('tstriage.runner')
 
+def ListAll(cache, epgStation):
+    existingWorkItemPathList = []
+    for pattern in ('*.tomark', '*.toconfirm', '*.toconfirm', '*.toencode', '*.tocleanup'):
+        for path in cache.glob(pattern):
+            with Path(path).open() as f:
+                item = json.load(f)
+            existingWorkItemPathList.append(item['path'])
+    queue = List(configuration, epgStation)
+    newItemQueue = []
+    for item in queue:
+        if item['path'] not in existingWorkItemPathList:
+            newItemQueue.append(item)
+    maxFilesToProcess = configuration['MaxFilesToProcess']
+    existingSeats = maxFilesToProcess - len(existingWorkItemPathList)
+    if len(newItemQueue) > existingSeats:
+        newItemQueue = newItemQueue[:existingSeats]
+    for item in newItemQueue:
+        itemPath = cache / (Path(item['path']).stem + '.tomark')
+        with itemPath.open('w', encoding='utf-8') as f:
+            json.dump(item, f, ensure_ascii=False, indent=True)
+
+def MarkCache(cache, epgStation):
+    for path in cache.glob('*.tomark'):
+        with path.open(encoding='utf-8') as f:
+            item = json.load(f)
+        Mark(item=item, epgStation=epgStation)
+        path.rename(path.with_suffix('.toencode'))
+
+def EncodeCache(cache, epgStation):
+    for path in cache.glob('*.toencode'):
+        with path.open(encoding='utf-8') as f:
+            item = json.load(f)
+        Encode(item=item, epgStation=epgStation)
+        path.rename(path.with_suffix('.toconfirm'))
+
+def ConfirmCache(cache, epgStation):
+    for path in cache.glob('*.toencode'):
+        with path.open(encoding='utf-8') as f:
+            item = json.load(f)
+        Confirm(item=item, epgStation=epgStation)
+    for path in cache.glob('*.toconfirm'):
+        with path.open(encoding='utf-8') as f:
+            item = json.load(f)
+        reEncodingNeeded = Confirm(item=item, epgStation=epgStation)
+        if reEncodingNeeded:
+            path.rename(path.with_suffix('.toencode'))
+        else:
+            path.rename(path.with_suffix('.tocleanup'))
+
+def CleanupCache(cache):
+    for path in cache.glob('*.tocleanup'):
+        with path.open(encoding='utf-8') as f:
+            item = json.load(f)
+        Cleanup(item=item)
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Python script to triage TS files')
     parser.add_argument('--config', '-c', required=True, help='configuration file path')
@@ -33,55 +88,15 @@ if __name__ == "__main__":
             if task == 'categorize':
                 Categorize(configuration, epgStation)
             elif task == 'list':
-                existingWorkItemPathList = []
-                for pattern in ('*.tomark', '*.toconfirm', '*.toconfirm', '*.toencode', '*.tocleanup'):
-                    for path in cache.glob(pattern):
-                        with Path(path).open() as f:
-                            item = json.load(f)
-                        existingWorkItemPathList.append(item['path'])
-                queue = List(configuration, epgStation)
-                newItemQueue = []
-                for item in queue:
-                    if item['path'] not in existingWorkItemPathList:
-                        newItemQueue.append(item)
-                maxFilesToProcess = configuration['MaxFilesToProcess']
-                existingSeats = maxFilesToProcess - len(existingWorkItemPathList)
-                if len(newItemQueue) > existingSeats:
-                    newItemQueue = newItemQueue[:existingSeats]
-                for item in newItemQueue:
-                    itemPath = cache / (Path(item['path']).stem + '.tomark')
-                    with itemPath.open('w', encoding='utf-8') as f:
-                        json.dump(item, f, ensure_ascii=False, indent=True)
+                ListAll(cache, epgStation)
             elif task == 'mark':
-                for path in cache.glob('*.tomark'):
-                    with path.open(encoding='utf-8') as f:
-                        item = json.load(f)
-                    Mark(item=item, epgStation=epgStation)
-                    path.rename(path.with_suffix('.toencode'))
+                MarkCache(cache, epgStation)
             elif task == 'encode':
-                for path in cache.glob('*.toencode'):
-                    with path.open(encoding='utf-8') as f:
-                        item = json.load(f)
-                    Encode(item=item, epgStation=epgStation)
-                    path.rename(path.with_suffix('.toconfirm'))
+                EncodeCache(cache, epgStation)
             elif task == 'confirm':
-                for path in cache.glob('*.toencode'):
-                    with path.open(encoding='utf-8') as f:
-                        item = json.load(f)
-                    Confirm(item=item, epgStation=epgStation)
-                for path in cache.glob('*.toconfirm'):
-                    with path.open(encoding='utf-8') as f:
-                        item = json.load(f)
-                    reEncodingNeeded = Confirm(item=item, epgStation=epgStation)
-                    if reEncodingNeeded:
-                        path.rename(path.with_suffix('.toencode'))
-                    else:
-                        path.rename(path.with_suffix('.tocleanup'))
+                ConfirmCache(cache, epgStation)
             elif task == 'cleanup':
-                for path in cache.glob('*.tocleanup'):
-                    with path.open(encoding='utf-8') as f:
-                        item = json.load(f)
-                    Cleanup(item=item)
+                CleanupCache(cache)
 
         if args.daemon is None:
             break
