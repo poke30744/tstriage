@@ -95,21 +95,17 @@ if __name__ == "__main__":
 
     logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 
-    WindowsInhibitor.inhibit()
-
     configurationPath = Path(args.config)
     with configurationPath.open() as f:
         configuration = json.load(f)
     
     runner = Runner(configuration)
 
-    while True:
-        runner.Run(args.task)
-
-        if args.daemon is None:
-            break
-        else:
-            print(f'.{args.daemon}.', end="")
-            time.sleep(args.daemon)
-
-    WindowsInhibitor.uninhibit()
+    with WindowsInhibitor() as wi:
+        while True:
+            runner.Run(args.task)
+            if args.daemon is None:
+                break
+            else:
+                print(f'.{args.daemon}.', end="")
+                time.sleep(args.daemon)

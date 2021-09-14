@@ -18,11 +18,18 @@ class WindowsInhibitor:
         import ctypes
         logger.info('Preventing Windows from going to sleep')
         ctypes.windll.kernel32.SetThreadExecutionState(WindowsInhibitor.ES_CONTINUOUS | WindowsInhibitor.ES_SYSTEM_REQUIRED)
+    
     @staticmethod
     def uninhibit():
         import ctypes
         logger.info('Allowing Windows to go to sleep')
         ctypes.windll.kernel32.SetThreadExecutionState(WindowsInhibitor.ES_CONTINUOUS)
+    
+    def __enter__(self):
+        WindowsInhibitor.inhibit()
+    
+    def __exit__(self, exc_type, exc_value, traceback):
+        WindowsInhibitor.uninhibit()
     
 def CopyWithProgress(srcPath, dstPath, force=False, epgStation=None):
     srcPath, dstPath = Path(srcPath), Path(dstPath)
