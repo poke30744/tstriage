@@ -1,4 +1,4 @@
-import sys, shutil, time
+import shutil
 from pathlib import Path
 import logging
 from tqdm import tqdm
@@ -30,7 +30,27 @@ class WindowsInhibitor:
     
     def __exit__(self, exc_type, exc_value, traceback):
         WindowsInhibitor.uninhibit()
+
+class LogRedirector:
+    def __init__(self, path):
+        self.path = path
+        self.existingHandler = None
+
+    def __enter__(self):
+        logger = logging.getLogger()
+        for handler in logger.handlers:
+            if isinstance(handler, logging.FileHandler):
+                self.existingHandler = handler
+                logger.removeHandler(self.existingHandler)
+                break
+        self.handler = logging.FileHandler(self.path, 'w')
+        logger.addHandler(self.handler)
     
+    def __exit__(self, exc_type, exc_value, traceback):
+        logger.removeHandler(self.handler)
+        if self.existingHandler is not None:
+            logger.addHandler(self.existingHandler)
+
 def CopyWithProgress(srcPath, dstPath, force=False, epgStation=None):
     srcPath, dstPath = Path(srcPath), Path(dstPath)
     if not force and dstPath.is_file() and srcPath.stat().st_size == dstPath.stat().st_size and round(srcPath.stat().st_mtime) == round(dstPath.stat().st_mtime):

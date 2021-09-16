@@ -2,7 +2,7 @@
 import argparse, json, time
 from pathlib import Path
 import logging
-from .common import WindowsInhibitor
+from .common import WindowsInhibitor, LogRedirector
 from .epgstation import EPGStation
 from .tasks import Categorize, List, Mark, Encode, Confirm, Cleanup
 
@@ -17,7 +17,7 @@ class Runner:
 
     def List(self):
         existingWorkItemPathList = []
-        for pattern in ('*.tomark', '*.toconfirm', '*.toconfirm', '*.toencode', '*.tocleanup'):
+        for pattern in ('*.tomark', '*.toconfirm', '*.toconfirm', '*.toencode', '*.tocleanup', '.error'):
             for path in self.cache.glob(pattern):
                 with Path(path).open() as f:
                     item = json.load(f)
@@ -40,15 +40,25 @@ class Runner:
         for path in self.cache.glob('*.tomark'):
             with path.open(encoding='utf-8') as f:
                 item = json.load(f)
-            Mark(item=item, epgStation=self.epgStation)
-            path.rename(path.with_suffix('.toencode'))
+            with LogRedirector(Path(str(path) + '.log')) as lr:
+                try:
+                    Mark(item=item, epgStation=self.epgStation)
+                    path.rename(path.with_suffix('.toencode'))
+                except:
+                    logger.exception(F'in marking "{path}":')
+                    path.rename(path.with_suffix('.error'))
 
     def Encode(self):
         for path in self.cache.glob('*.toencode'):
             with path.open(encoding='utf-8') as f:
                 item = json.load(f)
-            Encode(item=item, epgStation=self.epgStation)
-            path.rename(path.with_suffix('.toconfirm'))
+            with LogRedirector(Path(str(path) + '.log')) as lr:
+                try:
+                    Encode(item=item, epgStation=self.epgStation)
+                    path.rename(path.with_suffix('.toconfirm'))
+                except:
+                    logger.exception(F'in marking "{path}":')
+                    path.rename(path.with_suffix('.error'))
 
     def Confirm(self):
         for path in self.cache.glob('*.toencode'):
