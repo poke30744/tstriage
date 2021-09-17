@@ -44,6 +44,8 @@ class Runner:
                 try:
                     Mark(item=item, epgStation=self.epgStation)
                     path.rename(path.with_suffix('.toencode'))
+                except KeyboardInterrupt:
+                    raise
                 except:
                     logger.exception(F'in marking "{path}":')
                     path.rename(path.with_suffix('.error'))
@@ -56,6 +58,8 @@ class Runner:
                 try:
                     Encode(item=item, epgStation=self.epgStation)
                     path.rename(path.with_suffix('.toconfirm'))
+                except KeyboardInterrupt:
+                    raise
                 except:
                     logger.exception(F'in marking "{path}":')
                     path.rename(path.with_suffix('.error'))
