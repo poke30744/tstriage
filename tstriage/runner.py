@@ -2,7 +2,7 @@
 import argparse, json, time
 from pathlib import Path
 import logging
-from .common import WindowsInhibitor, LogRedirector
+from .common import WindowsInhibitor
 from .epgstation import EPGStation
 from .tasks import Categorize, List, Mark, Encode, Confirm, Cleanup
 
@@ -40,29 +40,27 @@ class Runner:
         for path in self.cache.glob('*.tomark'):
             with path.open(encoding='utf-8') as f:
                 item = json.load(f)
-            with LogRedirector(Path(str(path) + '.log')) as lr:
-                try:
-                    Mark(item=item, epgStation=self.epgStation)
-                    path.rename(path.with_suffix('.toencode'))
-                except KeyboardInterrupt:
-                    raise
-                except:
-                    logger.exception(F'in marking "{path}":')
-                    path.rename(path.with_suffix('.error'))
+            try:
+                Mark(item=item, epgStation=self.epgStation)
+                path.rename(path.with_suffix('.toencode'))
+            except KeyboardInterrupt:
+                raise
+            except:
+                logger.exception(F'in marking "{path}":')
+                path.rename(path.with_suffix('.error'))
 
     def Encode(self):
         for path in self.cache.glob('*.toencode'):
             with path.open(encoding='utf-8') as f:
                 item = json.load(f)
-            with LogRedirector(Path(str(path) + '.log')) as lr:
-                try:
-                    Encode(item=item, epgStation=self.epgStation)
-                    path.rename(path.with_suffix('.toconfirm'))
-                except KeyboardInterrupt:
-                    raise
-                except:
-                    logger.exception(F'in marking "{path}":')
-                    path.rename(path.with_suffix('.error'))
+            try:
+                Encode(item=item, epgStation=self.epgStation)
+                path.rename(path.with_suffix('.toconfirm'))
+            except KeyboardInterrupt:
+                raise
+            except:
+                logger.exception(F'in marking "{path}":')
+                path.rename(path.with_suffix('.error'))
 
     def Confirm(self):
         for path in self.cache.glob('*.toencode'):
@@ -85,6 +83,7 @@ class Runner:
             Cleanup(item=item)
     
     def Run(self, tasks):
+        logger.info(f'running {tasks} ...')
         for task in tasks:
             if task == 'categorize':
                 Categorize(self.configuration, self.epgStation)
