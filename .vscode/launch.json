@@ -86,6 +86,17 @@
                 "-t",
                 "cleanup"
             ]
+        },
+        {
+            "name": "trigger",
+            "type": "python",
+            "request": "launch",
+            "justMyCode": false,
+            "module": "tstriage.trigger",
+            "args": [
+                "-c",
+                "triage.sample.json"
+            ]
         }
     ]
 }
