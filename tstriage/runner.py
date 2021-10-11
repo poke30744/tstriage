@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-import argparse, json, time
+import argparse, json, time, os
 from pathlib import Path
 import logging
 from .common import WindowsInhibitor
@@ -14,6 +14,10 @@ class Runner:
         self.cache = Path(configuration['Cache']).expanduser()
         self.cache.mkdir(parents=True, exist_ok=True)
         self.epgStation = EPGStation(url=configuration['EPGStation'], cache=configuration['Cache']) if 'EPGStation' in configuration else None
+        if 'Path' in configuration:
+            for key in configuration['Path']:
+                pathToAdd = configuration["Path"][key]
+                os.environ['PATH'] = f'{os.environ["PATH"]};{pathToAdd}'
 
     def List(self):
         existingWorkItemPathList = []
