@@ -18,6 +18,10 @@ class Runner:
             for key in configuration['Path']:
                 pathToAdd = configuration["Path"][key]
                 os.environ['PATH'] = f'{os.environ["PATH"]};{pathToAdd}'
+        if 'Encoder' in configuration:
+            self.encoder = configuration['Encoder']
+        else:
+            self.encoder = 'h264'
 
     def List(self):
         existingWorkItemPathList = []
@@ -58,7 +62,7 @@ class Runner:
             with path.open(encoding='utf-8') as f:
                 item = json.load(f)
             try:
-                Encode(item=item, epgStation=self.epgStation)
+                Encode(item=item, encoder=self.encoder, epgStation=self.epgStation)
                 path.rename(path.with_suffix('.toconfirm'))
             except KeyboardInterrupt:
                 raise

@@ -153,7 +153,7 @@ def Confirm(item, epgStation):
         logger.warning("*** Re-encoding is needed! ***")
     return isReEncodingNeeded
 
-def Encode(item, epgStation):
+def Encode(item, encoder, epgStation):
     path = Path(item['path'])
     cache = Path(item['cache']).expanduser()
     workingPath = cache / path.name.replace('.ts', '_trimmed.ts')
@@ -184,8 +184,7 @@ def Encode(item, epgStation):
 
         preset = item['encoder']['preset']
         cropdetect = item['encoder'].get('cropdetect')
-        #encodedPath = EncodeTS(strippedTsPath, preset, cropdetect, 'hevc', 22, strippedTsPath.with_suffix('.mp4'))
-        encodedPath = tsutils.encode.EncodeTS(strippedTsPath, preset, cropdetect, 'h264_nvenc', 19, strippedTsPath.with_suffix('.mp4'))
+        encodedPath = tsutils.encode.EncodeTS(strippedTsPath, preset, cropdetect, encoder, strippedTsPath.with_suffix('.mp4'))
 
         logger.info('Uploading processed files ...')
         destination = Path(item['destination'])
