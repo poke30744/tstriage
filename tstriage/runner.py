@@ -27,7 +27,7 @@ class Runner:
         existingWorkItemPathList = []
         for pattern in ('*.tomark', '*.toconfirm', '*.toconfirm', '*.toencode', '*.tocleanup', '.error'):
             for path in self.cache.glob(pattern):
-                with Path(path).open() as f:
+                with Path(path).open(encoding='utf-8') as f:
                     item = json.load(f)
                 existingWorkItemPathList.append(item['path'])
         queue = List(self.configuration, self.epgStation)
@@ -117,7 +117,7 @@ if __name__ == "__main__":
     logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 
     configurationPath = Path(args.config)
-    with configurationPath.open() as f:
+    with configurationPath.open(encoding='utf-8') as f:
         configuration = json.load(f)
     
     runner = Runner(configuration)

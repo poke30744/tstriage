@@ -17,7 +17,7 @@ class EPGStation:
             with urllib.request.urlopen(f'{self.url}/api/reserves') as response:
                 with self.reservesJsonPath.open('wb') as f:
                     shutil.copyfileobj(response, f)
-        with self.reservesJsonPath.open() as f:
+        with self.reservesJsonPath.open(encoding='utf-8') as f:
             return json.load(f)['reserves']
 
     def IsBusy(self, at=None, duration=None):
