@@ -1,3 +1,4 @@
+from os import unlink
 import shutil
 from pathlib import Path
 import logging
@@ -52,8 +53,7 @@ def CopyWithProgress(srcPath, dstPath, force=False, epgStation=None):
                     remaining -= len(buf)
     shutil.copystat(srcPath, dstPath)
 
-def ExtractProgram(videoPath, indexPath, markerPath, byGroup):
-    ptsMap, markerMap = LoadExistingData(indexPath, markerPath)
+def ExtractProgramList(markerMap, byGroup):
     # split by _groundtruth or _ensemble
     if '_groundtruth' in list(markerMap.values())[0]:
         clips = [ eval(k) for k, v in markerMap.items() if v['_groundtruth'] == 1.0 ]
@@ -79,14 +79,37 @@ def ExtractProgram(videoPath, indexPath, markerPath, byGroup):
             else:
                 mergedClips.append(previousClip)
                 mergedClips.append(clip)
-    programTsList = []
-    for i in range(len(mergedClips)):
-        clip = mergedClips[i]
+    # generate program list
+    programList = [ [clip] for clip in mergedClips ] if byGroup else [ mergedClips ]
+    return programList
+
+def ExtractProgram(videoPath, clips, ptsMap, outputPath, quiet=True):
+    totalSize = 0
+    for clip in clips:
         start, end = ptsMap[str(clip[0])]['next_start_pos'], ptsMap[str(clip[1])]['prev_end_pos']
-        if byGroup:
-            programTsPath = videoPath.with_name(videoPath.name.replace('.ts', f'_prog_{i+1}.ts'))
-        else:
-            programTsPath = videoPath.with_name(videoPath.name.replace('.ts', f'_prog.ts'))
-        CopyPart(videoPath, programTsPath, start, end, mode='ab')
-        programTsList.append(programTsPath)
-    return sorted(list(set(programTsList)))
+        totalSize += end - start
+    if Path(outputPath).exists():
+        unlink(outputPath)
+    with tqdm(total=totalSize, unit='B', unit_scale=True, unit_divisor=1024, disable=quiet) as pbar:
+        for clip in clips:
+            start, end = ptsMap[str(clip[0])]['next_start_pos'], ptsMap[str(clip[1])]['prev_end_pos']
+            CopyPart(videoPath, outputPath, start, end, mode='ab', pbar=pbar)
+
+def ExtractPrograms(videoPath, indexPath, markerPath, byGroup):
+    ptsMap, markerMap = LoadExistingData(indexPath, markerPath)
+    programClipsList = ExtractProgramList(markerMap, byGroup)
+    programTsList = []
+    if byGroup:
+        for i in range(len(programClipsList)):
+            clips = programClipsList[i]
+            outputPath = videoPath.with_name(videoPath.name.replace('.ts', f'_prog_{i+1}.ts'))
+            logger.info(f'Extracting "{outputPath.name}" ...')
+            ExtractProgram(videoPath, clips, ptsMap, outputPath, quiet=False)
+            programTsList.append(outputPath)
+    else:
+        clips = programClipsList[0]
+        outputPath = videoPath.with_name(videoPath.name.replace('.ts', f'_prog.ts'))
+        logger.info(f'Extracting "{outputPath.name}" ...')
+        ExtractProgram(videoPath, clips, ptsMap, outputPath, quiet=False)
+        programTsList.append(outputPath)
+    return programTsList

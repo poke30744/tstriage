@@ -1,7 +1,7 @@
 from pathlib import Path
 import shutil, logging, json, os
 from datetime import datetime, timedelta
-from .common import CopyWithProgress, ExtractProgram
+from .common import CopyWithProgress, ExtractPrograms
 import tsutils.splitter, tsutils.epg, tscutter.analyze, tsmarker.marker, tsmarker.common, tsmarker.ensemble
 
 logger = logging.getLogger('tstriage.tasks')
@@ -166,7 +166,7 @@ def Encode(item, encoder, epgStation):
     markerPath = cache / '_metadata' / (workingPath.stem + '.markermap')
 
     byGroup = item.get('encoder', {}).get('bygroup', False)
-    programTsList = ExtractProgram(videoPath=workingPath, indexPath=indexPath, markerPath=markerPath, byGroup=byGroup)
+    programTsList = ExtractPrograms(videoPath=workingPath, indexPath=indexPath, markerPath=markerPath, byGroup=byGroup)
     for programTsPath in programTsList:
         logger.info('Extracting subtitles ...')
         subtitlesPathList = tsutils.subtitles.Extract(programTsPath)
