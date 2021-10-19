@@ -10,5 +10,5 @@
         "TsSplitter": "C:\\Software\\TsSplitter",
         "Caption2Ass": "C:\\Software\\Caption2Ass"
     },
-    "Encoder": "nvenc_h264"
+    "Encoder": "h264_nvenc"
 }
