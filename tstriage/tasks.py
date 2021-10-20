@@ -128,7 +128,6 @@ def Mark(item, epgStation):
     _, markerMap = tsmarker.common.LoadExistingData(indexPath, markerPath)
     noSubtitles = any([ v['subtitles'] == 0.5 for _, v in markerMap.items() ])
 
-    logger.info('Cutting CMs ...')
     if '_groudtruth' in list(markerMap.items())[0][1]:
         byMethod = '_groundtruth'
     elif byEnsemble:
@@ -137,6 +136,7 @@ def Mark(item, epgStation):
         byMethod = 'logo'
     else:
         byMethod = 'subtitles'
+    logger.info(f'Cutting CMs by {byMethod} ...')
     _cuttedProgramPath = tsmarker.marker.CutCMs(videoPath=trimmedPath, indexPath=indexPath, markerPath=markerPath, byMethod=byMethod, outputFolder=workingPath.parent / workingPath.stem)
 
 def Confirm(item, epgStation):
