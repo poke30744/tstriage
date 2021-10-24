@@ -97,6 +97,43 @@
                 "-c",
                 "triage.sample.json"
             ]
+        },
+        {
+            "name": "pipeline encode",
+            "type": "python",
+            "request": "launch",
+            "justMyCode": false,
+            "module": "tstriage.pipeline",
+            "args": [
+                "encode",
+                "-i",
+                "C:\\Samples\\conan.ts",
+                "--bygroup"
+            ]
+        },
+        {
+            "name": "pipeline logo",
+            "type": "python",
+            "request": "launch",
+            "justMyCode": false,
+            "module": "tstriage.pipeline",
+            "args": [
+                "logo",
+                "-i",
+                "C:\\Samples\\lupin.ts",
+            ]
+        },
+        {
+            "name": "pipeline cropdetect",
+            "type": "python",
+            "request": "launch",
+            "justMyCode": false,
+            "module": "tstriage.pipeline",
+            "args": [
+                "cropdetect",
+                "-i",
+                "C:\\Samples\\_metadata\\lupin_video_edge.png",
+            ]
         }
     ]
 }
