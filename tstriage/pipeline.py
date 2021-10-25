@@ -142,7 +142,7 @@ def EncodePipeline(inFile, ptsMap, markerMap, byGroup, preset, encoder):
                 stripTsP = subprocess.Popen(StripTsCmd('-', '-'), stdin=subprocess.PIPE, stdout=encodeTsP.stdin, stderr=stripLogs)
                 # subtitles
                 subtitlesP = subprocess.Popen(    
-                    ['Captain2AssC2.cmd', '-', outFile.with_suffix('') ],
+                    ['Captain2AssC.cmd', '-', outFile.with_suffix('') ],
                     stdin=subprocess.PIPE,
                     startupinfo=subprocess.STARTUPINFO(wShowWindow=6, dwFlags=subprocess.STARTF_USESHOWWINDOW),
                     creationflags=subprocess.CREATE_NEW_CONSOLE)
