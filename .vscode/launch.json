@@ -136,6 +136,18 @@
             ]
         },
         {
+            "name": "epgstation status",
+            "type": "python",
+            "request": "launch",
+            "justMyCode": false,
+            "module": "tstriage.epgstation",
+            "args": [
+                "status",
+                "-s",
+                "http://acepc-gk3.local:8888"
+            ]
+        },
+        {
             "name": "epgstation info",
             "type": "python",
             "request": "launch",
