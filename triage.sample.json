@@ -1,11 +1,11 @@
 {
-    "Uncategoried": "\\\\raspberrypi4\\BUFFALO_Exp\\recorded",
-    "Categorized": "\\\\raspberrypi4\\BUFFALO_Exp\\categorized",
-    "Destination": "\\\\raspberrypi4\\BUFFALO_Exp\\categorized_mp4",
+    "Uncategoried": "\\\\acepc-gk3\\BUFFALO_Exp\\recorded",
+    "Categorized": "\\\\acepc-gk3\\BUFFALO_Exp\\categorized",
+    "Destination": "\\\\acepc-gk3\\BUFFALO_Exp\\categorized_mp4",
     "Cache": "~/Desktop/workingFolder2",
     "NewerThan": 500,
     "MaxFilesToProcess": 10,        
-    "EPGStation": "http://raspberrypi4.local:8888",
+    "EPGStation": "http://acepc-gk3.local:8888",
     "Path": {
         "TsSplitter": "C:\\Software\\TsSplitter",
         "Caption2Ass": "C:\\Software\\Caption2Ass"
