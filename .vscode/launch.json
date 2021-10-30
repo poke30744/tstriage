@@ -134,6 +134,20 @@
                 "-i",
                 "C:\\Samples\\_metadata\\lupin_video_edge.png",
             ]
+        },
+        {
+            "name": "epgstation info",
+            "type": "python",
+            "request": "launch",
+            "justMyCode": false,
+            "module": "tstriage.epgstation",
+            "args": [
+                "info",
+                "-s",
+                "http://acepc-gk3.local:8888",
+                "-i",
+                "C:\\Samples\\2021年10月30日15時00分00秒-ふしぎ駄菓子屋 銭天堂(第1期)[字] #11,12.m2ts",
+            ]
         }
     ]
 }
