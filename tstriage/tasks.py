@@ -13,7 +13,7 @@ def Categorize(configuration, epgStation=None):
     categoryFolders = [ path for path in Path(configuration['Categorized']).glob('**/*') if path.is_dir() ]
     categoryFolders.sort(key=lambda item: (-len(str(item)), item))
     filesMoved = []
-    for path in Path(configuration['Uncategoried']).glob('*.ts'):
+    for path in [ path for path in Path(configuration['Uncategoried']).glob('*') if path.suffix in ('.ts', '.m2ts') ]:
         newPath = None
         for folder in categoryFolders:
             category = folder.name
@@ -46,14 +46,15 @@ def List(configuration, epgStation=None):
     newerThan = configuration['NewerThan']
     
     tsPaths = []
-    for path in categorized.glob('**/*.ts'): 
-        modifiedTime = datetime.fromtimestamp(path.stat().st_mtime)
-        if datetime.now() - modifiedTime < timedelta(days=newerThan):
-            if path.parent.stem != '_Unknown':
-                tsPaths.append(path)
+    for path in categorized.glob('**/*'):
+        if path.suffix in ('.ts', '.m2ts'): 
+            modifiedTime = datetime.fromtimestamp(path.stat().st_mtime)
+            if datetime.now() - modifiedTime < timedelta(days=newerThan):
+                if path.parent.stem != '_Unknown':
+                    tsPaths.append(path)
             
     tsToProcess = []
-    processedFilenames = [ path.name for path in Path(destination).glob('**/*.ts') ] + [ path.name for path in Path(destination).glob('**/*.mp4') ]
+    processedFilenames = [ path.name for path in Path(destination).glob('**/*') if path.suffix in ('.ts', '.m2ts', '.mp4') ]
     for path in tsPaths:
         if all([ path.stem not in filename for filename in processedFilenames ]):
             tsToProcess.append(path)
@@ -83,7 +84,7 @@ def Mark(item, epgStation):
     cache = Path(item['cache']).expanduser()
     logger.info('Copying TS file to working folder ...')
     workingPath = cache / path.name
-    trimmedPath = cache / path.name.replace('.ts', '_trimmed.ts')
+    trimmedPath = cache / path.name.replace(path.suffix, '_trimmed.ts')
     if not trimmedPath.exists():
         CopyWithProgress(path, workingPath, epgStation=epgStation)
         logger.info('Trimming original TS ...')
@@ -142,7 +143,7 @@ def Mark(item, epgStation):
 def Confirm(item, epgStation):
     path = Path(item['path'])
     cache = Path(item['cache']).expanduser()
-    workingPath = cache / path.name.replace('.ts', '_trimmed.ts')
+    workingPath = cache / path.name.replace(path.suffix, '_trimmed.ts')
     logger.info(f'Marking ground truth for {workingPath.name} ...')
     cuttedProgramFolder = cache / path.stem
     markerPath = cache / '_metadata' / (workingPath.stem + '.markermap')
@@ -156,7 +157,7 @@ def Confirm(item, epgStation):
 def Encode(item, encoder, epgStation):
     path = Path(item['path'])
     cache = Path(item['cache']).expanduser()
-    workingPath = cache / path.name.replace('.ts', '_trimmed.ts')
+    workingPath = cache / path.name.replace(path.suffix, '_trimmed.ts')
 
     logger.info('Extracting EPG ...')
     epgPath, txtPath = tsutils.epg.Dump(workingPath)
