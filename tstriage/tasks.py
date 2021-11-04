@@ -1,5 +1,5 @@
 from pathlib import Path
-import shutil, logging, json, os
+import shutil, logging, json, os, unicodedata
 from datetime import datetime, timedelta
 from .common import CopyWithProgress, ExtractPrograms
 import tsutils.splitter, tsutils.epg, tscutter.analyze, tsmarker.marker, tsmarker.common, tsmarker.ensemble
@@ -17,7 +17,7 @@ def Categorize(configuration, epgStation=None):
         newPath = None
         for folder in categoryFolders:
             category = folder.name
-            if category in path.stem:
+            if unicodedata.normalize('NFKC', category) in unicodedata.normalize('NFKC', path.stem):
                 newPath = folder / path.name
                 break
         if newPath is None:
