@@ -167,7 +167,8 @@ def Encode(item, encoder, epgStation):
     markerPath = cache / '_metadata' / (workingPath.stem + '.markermap')
 
     byGroup = item.get('encoder', {}).get('bygroup', False)
-    programTsList = ExtractPrograms(videoPath=workingPath, indexPath=indexPath, markerPath=markerPath, byGroup=byGroup)
+    splitNum = item.get('encoder', {}).get('split', 1)
+    programTsList = ExtractPrograms(videoPath=workingPath, indexPath=indexPath, markerPath=markerPath, byGroup=byGroup, splitNum=splitNum)
     for programTsPath in programTsList:
         logger.info('Extracting subtitles ...')
         subtitlesPathList = tsutils.subtitles.Extract(programTsPath)

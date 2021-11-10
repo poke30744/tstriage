@@ -95,13 +95,31 @@ def ExtractProgram(videoPath, clips, ptsMap, outputPath, quiet=True):
             start, end = ptsMap[str(clip[0])]['next_start_pos'], ptsMap[str(clip[1])]['prev_end_pos']
             CopyPart(videoPath, outputPath, start, end, mode='ab', pbar=pbar)
 
-def ExtractPrograms(videoPath, indexPath, markerPath, byGroup):
+def GetClipsDuration(clips):
+    duration = 0
+    for clip in clips:
+        duration += clip[1] - clip[0]
+    return duration
+
+def ExtractPrograms(videoPath, indexPath, markerPath, byGroup, splitNum):
     ptsMap, markerMap = LoadExistingData(indexPath, markerPath)
     programClipsList = ExtractProgramList(markerMap, byGroup)
     programTsList = []
     if byGroup:
         for i in range(len(programClipsList)):
             clips = programClipsList[i]
+            outputPath = videoPath.with_name(videoPath.name.replace('.ts', f'_prog_{i+1}.ts'))
+            logger.info(f'Extracting "{outputPath.name}" ...')
+            ExtractProgram(videoPath, clips, ptsMap, outputPath, quiet=False)
+            programTsList.append(outputPath)
+    elif splitNum > 1:
+        programsDuration = GetClipsDuration(programClipsList[0])
+        for i in range(splitNum):
+            clips = []
+            while programClipsList[0] != []:
+                clips.append(programClipsList[0].pop(0))
+                if 0.95 < GetClipsDuration(clips) / programsDuration * splitNum < 1.05:
+                    break
             outputPath = videoPath.with_name(videoPath.name.replace('.ts', f'_prog_{i+1}.ts'))
             logger.info(f'Extracting "{outputPath.name}" ...')
             ExtractProgram(videoPath, clips, ptsMap, outputPath, quiet=False)
