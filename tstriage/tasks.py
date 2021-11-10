@@ -1,8 +1,12 @@
 from pathlib import Path
 import shutil, logging, json, os, unicodedata
 from datetime import datetime, timedelta
+from tscutter.common import EncodingError
+import tscutter.analyze, tsmarker.marker, tsmarker.common, tsmarker.ensemble
 from .common import CopyWithProgress, ExtractPrograms
-import tsutils.splitter, tsutils.epg, tscutter.analyze, tsmarker.marker, tsmarker.common, tsmarker.ensemble
+from .splitter import Trim
+from .epg import Dump
+from .encode import StripAndRepackTS, StripTS, EncodeTS
 
 logger = logging.getLogger('tstriage.tasks')
 
@@ -88,7 +92,7 @@ def Mark(item, epgStation):
     if not trimmedPath.exists():
         CopyWithProgress(path, workingPath, epgStation=epgStation)
         logger.info('Trimming original TS ...')
-        trimmedPath = tsutils.splitter.Trim(videoPath=workingPath, outputPath=trimmedPath)
+        trimmedPath = Trim(videoPath=workingPath, outputPath=trimmedPath)
         workingPath.unlink()
 
     logger.info('Analyzing to split ...')
@@ -129,7 +133,7 @@ def Mark(item, epgStation):
     _, markerMap = tsmarker.common.LoadExistingData(indexPath, markerPath)
     noSubtitles = any([ v['subtitles'] == 0.5 for _, v in markerMap.items() ])
 
-    if '_groudtruth' in list(markerMap.items())[0][1]:
+    if '_groundtruth' in list(markerMap.items())[0][1]:
         byMethod = '_groundtruth'
     elif byEnsemble:
         byMethod = '_ensemble'
@@ -160,7 +164,7 @@ def Encode(item, encoder, epgStation):
     workingPath = cache / path.name.replace(path.suffix, '_trimmed.ts')
 
     logger.info('Extracting EPG ...')
-    epgPath, txtPath = tsutils.epg.Dump(workingPath)
+    epgPath, txtPath = Dump(workingPath)
 
     logger.info('Extracting program from TS ...')
     indexPath = cache / '_metadata' / (workingPath.stem + '.ptsmap')
@@ -171,22 +175,22 @@ def Encode(item, encoder, epgStation):
     programTsList = ExtractPrograms(videoPath=workingPath, indexPath=indexPath, markerPath=markerPath, byGroup=byGroup, splitNum=splitNum)
     for programTsPath in programTsList:
         logger.info('Extracting subtitles ...')
-        subtitlesPathList = tsutils.subtitles.Extract(programTsPath)
+        subtitlesPathList = tsmarker.subtitles.Extract(programTsPath)
         subtitlesPathList = [ path.replace(path.with_name(path.name.replace('_prog.', '_prog.jpn.'))) for path in subtitlesPathList ]
 
         if item.get('encoder', {}).get('repack', False):
-            strippedTsPath = tsutils.encode.StripAndRepackTS(programTsPath)
+            strippedTsPath = StripAndRepackTS(programTsPath)
         else:
             try:
-                strippedTsPath = tsutils.encode.StripTS(programTsPath, fixAudio=True)
-            except tsutils.common.EncodingError:
+                strippedTsPath = StripTS(programTsPath, fixAudio=True)
+            except EncodingError:
                 logger.info('Striping failed again, trying to strip without mapping ...')
-                strippedTsPath = tsutils.encode.StripTS(programTsPath, nomap=True)
+                strippedTsPath = StripTS(programTsPath, nomap=True)
         programTsPath.unlink()
 
         preset = item['encoder']['preset']
         cropdetect = item['encoder'].get('cropdetect')
-        encodedPath = tsutils.encode.EncodeTS(strippedTsPath, preset, cropdetect, encoder, strippedTsPath.with_suffix('.mp4'))
+        encodedPath = EncodeTS(strippedTsPath, preset, cropdetect, encoder, strippedTsPath.with_suffix('.mp4'))
 
         logger.info('Uploading processed files ...')
         destination = Path(item['destination'])

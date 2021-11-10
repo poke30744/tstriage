@@ -3,7 +3,7 @@ import shutil
 from pathlib import Path
 import logging
 from tqdm import tqdm
-from tsutils.common import CopyPart
+from tscutter.common import CopyPart
 from tsmarker.common import LoadExistingData
 
 logger = logging.getLogger('tstriage.common')

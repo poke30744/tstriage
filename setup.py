@@ -5,7 +5,7 @@ with open("README.md", "r", encoding="utf-8") as fh:
 
 setuptools.setup(
     name="tstriage",
-    version="0.0.1",
+    version="0.0.9",
     author="poke30744",
     author_email="poke30744@gmail.com",
     description="MEPG TS Triage Runner",
@@ -13,15 +13,19 @@ setuptools.setup(
     long_description_content_type="text/markdown",
     url="https://github.com/pypa/sampleproject",
     packages=setuptools.find_packages(),
-     install_requires=[
+    install_requires=[
+        'tscutter',
         'tsmarker',
         'watchdog',
-        'py-getch'
+        'py-getch',
+        'yaml'
     ],
+    package_data={'': ['channels.yml']},
+    include_package_data=True,
     classifiers=[
         "Programming Language :: Python :: 3",
         "License :: OSI Approved :: MIT License",
         "Operating System :: OS Independent",
     ],
-    python_requires='>=3.6',
+    python_requires='>=3.9',
 )

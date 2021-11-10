@@ -4,10 +4,10 @@ from threading import Thread
 from tqdm import tqdm
 import numpy as np
 from PIL import Image
-from tsutils.encode import presets
-from tsutils.common import ClipToFilename
+from tscutter.common import ClipToFilename
 from tsmarker.common import GetClips, SelectClips
 from tsmarker.logo import drawEdges, cv2imread, cv2imwrite
+from .encode import presets
 from .common import ExtractProgramList
 
 logger = logging.getLogger('tstriage.pipeline')
