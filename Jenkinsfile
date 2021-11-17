@@ -24,7 +24,7 @@ pipeline {
         stage('Test') {
             steps {
                 sh 'pip install --extra-index-url https://test.pypi.org/simple/ dist/tstriage-0.1.$BUILD_NUMBER-py3-none-any.whl'
-                sh 'python -m tstriage.runner -h'
+                //sh 'python -m tstriage.runner -h'
             }
         }
         stage('Deploy') {
