@@ -20,7 +20,7 @@ setuptools.setup(
         'tsmarker',
         'watchdog',
         'py-getch',
-        'yaml'
+        'PyYAML'
     ],
     package_data={'': ['channels.yml']},
     include_package_data=True,
