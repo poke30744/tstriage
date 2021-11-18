@@ -22,6 +22,7 @@ pipeline {
                     ls -l
                 '''
                 sh 'python setup.py sdist bdist_wheel'
+                stash(name: 'compiled-results', includes: 'dist/*.whl*')
             }
         }
         stage('Test') {
@@ -32,6 +33,7 @@ pipeline {
                 }
             }
             steps {
+                unstash(name: 'compiled-results')
                 sh 'pip install --extra-index-url https://test.pypi.org/simple/ dist/tstriage-0.1.$BUILD_NUMBER-py3-none-any.whl'
                 //sh 'python -m tstriage.runner -h'
             }
@@ -47,6 +49,7 @@ pipeline {
                 }
             }
             steps {
+                unstash(name: 'compiled-results')
                 sh 'pip install twine'
                 withCredentials([usernamePassword(credentialsId: '65ddf05a-75ed-43cd-ab7e-5ac1e6af2526', usernameVariable: 'USERNAME', passwordVariable: 'PASSWORD')]) {
                     sh 'python -m twine upload -r testpypi dist/* -u $USERNAME -p $PASSWORD'
