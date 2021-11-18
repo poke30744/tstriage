@@ -30,7 +30,7 @@ pipeline {
                 docker {
                     label '!windows'
                     image 'python:3.9.7'
-                    args '--tmpfs /var/jenkins_home'
+                    args '-e HOME=/var/jenkins_home --tmpfs /var/jenkins_home'
                 }
             }
             steps {
