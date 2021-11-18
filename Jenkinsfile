@@ -81,10 +81,6 @@ pipeline {
         }
         cleanup {
             echo 'Cleaning up ...'
-            sh '''
-                rm -rf /var/jenkins_home/.cache/pip
-                rm -rf /var/jenkins_home/.local
-            '''
         }
     }
 }
