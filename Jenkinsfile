@@ -1,16 +1,21 @@
 pipeline {
     agent {
-        docker {
-            label '!windows'
-            image 'python:3.9.7'
-            args '-e HOME=/var/jenkins_home -v /var/jenkins_home:/var/jenkins_home'
-        } 
+        none
+    }
+    options {
+        skipStagesAfterUnstable()
     }
     parameters {
         booleanParam defaultValue: true, description: 'Publish to Test PyPI', name: 'PublishTestPyPI'
     }
     stages {
         stage('Build') {
+            agent {
+                docker {
+                    label '!windows'
+                    image 'python:3.9.7'
+                }
+            }
             steps {
                 sh '''
                     python --version
@@ -22,6 +27,12 @@ pipeline {
             }
         }
         stage('Test') {
+            agent {
+                docker {
+                    label '!windows'
+                    image 'python:3.9.7'
+                }
+            }
             steps {
                 sh 'pip install --extra-index-url https://test.pypi.org/simple/ dist/tstriage-0.1.$BUILD_NUMBER-py3-none-any.whl'
                 //sh 'python -m tstriage.runner -h'
@@ -30,6 +41,12 @@ pipeline {
         stage('Deploy') {
             when {
                 expression {params.PublishTestPyPI == true}
+            }
+            agent {
+                docker {
+                    label '!windows'
+                    image 'python:3.9.7'
+                }
             }
             steps {
                 sh 'pip install twine'
