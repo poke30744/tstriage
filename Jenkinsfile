@@ -30,7 +30,7 @@ pipeline {
                 docker {
                     label '!windows'
                     image 'python:3.9.7'
-                    args '--mount type=tmpfs,destination=/var/jenkins_home,mode=777'
+                    args '--tmpfs /var/jenkins_home'
                 }
             }
             steps {
