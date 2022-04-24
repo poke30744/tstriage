@@ -12,6 +12,18 @@
             "console": "integratedTerminal"
         },
         {
+            "name": "runner -t refresh",
+            "type": "python",
+            "request": "launch",
+            "module": "tstriage.runner",
+            "args": [
+                "-c",
+                "triage.sample.json",
+                "-t",
+                "refresh"
+            ]
+        },
+        {
             "name": "runner -t categorize",
             "type": "python",
             "request": "launch",

@@ -1,6 +1,5 @@
 from pathlib import Path
-import shutil, logging, json, os, unicodedata
-from datetime import datetime, timedelta
+import shutil, logging, os, json
 from tscutter.common import EncodingError
 import tscutter.analyze, tsmarker.marker, tsmarker.common, tsmarker.ensemble
 from .common import CopyWithProgress, ExtractPrograms
@@ -9,79 +8,6 @@ from .epg import Dump
 from .encode import StripAndRepackTS, StripTS, EncodeTS
 
 logger = logging.getLogger('tstriage.tasks')
-
-def Categorize(configuration, epgStation=None):
-    if epgStation is not None:
-        epgStation.BusyWait()
-    # categorize files by folder names in the destination
-    categoryFolders = [ path for path in Path(configuration['Categorized']).glob('**/*') if path.is_dir() ]
-    categoryFolders.sort(key=lambda item: (-len(str(item)), item))
-    filesMoved = []
-    for path in [ path for path in Path(configuration['Uncategoried']).glob('*') if path.suffix in ('.ts', '.m2ts') ]:
-        newPath = None
-        for folder in categoryFolders:
-            category = folder.name
-            if unicodedata.normalize('NFKC', category) in unicodedata.normalize('NFKC', path.stem):
-                newPath = folder / path.name
-                break
-        if newPath is None:
-            newPath = Path(configuration['Categorized']) / '_Unknown' / path.name # default category
-        shutil.move(path, newPath)
-        filesMoved.append(newPath)
-        logger.info(f'categorized: {newPath}')
-    return filesMoved
-
-def FindTsTriageSettings(folder):
-    folder = Path(folder)
-    settingsPath = folder / 'tstriage.json'
-    if settingsPath.exists():
-        return settingsPath
-    elif folder == Path('/'):
-        return None
-    else:
-        return FindTsTriageSettings(folder.parent)
-
-def List(configuration, epgStation=None):
-    if epgStation is not None:
-        epgStation.BusyWait()
-    categorized = Path(configuration['Categorized'])
-    cache = Path(configuration['Cache']).expanduser()
-    destination = Path(configuration['Destination'])
-    newerThan = configuration['NewerThan']
-    
-    tsPaths = []
-    for path in categorized.glob('**/*'):
-        if path.suffix in ('.ts', '.m2ts'): 
-            modifiedTime = datetime.fromtimestamp(path.stat().st_mtime)
-            if datetime.now() - modifiedTime < timedelta(days=newerThan):
-                if path.parent.stem != '_Unknown':
-                    tsPaths.append(path)
-            
-    tsToProcess = []
-    processedFilenames = [ path.name for path in Path(destination).glob('**/*') if path.suffix in ('.ts', '.m2ts', '.mp4') ]
-    for path in tsPaths:
-        if all([ path.stem not in filename for filename in processedFilenames ]):
-            tsToProcess.append(path)
-    
-    itemsToProcess = []
-    for path in tsToProcess:
-        settingsPath = FindTsTriageSettings(path.parent)
-        with settingsPath.open() as f:
-            settings = json.load(f)
-            itemsToProcess.append({
-                'path': str(path),
-                'cache': str(cache),
-                'destination': str(path.parent).replace(str(categorized), str(destination)),
-                'cutter': settings.get('cutter', {}),
-                'marker': settings.get('marker', {}),
-                'encoder': settings.get('encoder', {})
-            })
-
-    if len(itemsToProcess) > 0:
-        logger.info('Files to process:')
-        for item in itemsToProcess:
-            logger.info(item['path'])
-    return itemsToProcess
 
 def Mark(item, epgStation):
     path = Path(item['path'])
@@ -133,6 +59,7 @@ def Mark(item, epgStation):
     _, markerMap = tsmarker.common.LoadExistingData(indexPath, markerPath)
     noSubtitles = any([ v['subtitles'] == 0.5 for _, v in markerMap.items() ])
 
+    # cut the video by marking result for review
     if '_groundtruth' in list(markerMap.items())[0][1]:
         byMethod = '_groundtruth'
     elif byEnsemble:
@@ -144,16 +71,20 @@ def Mark(item, epgStation):
     logger.info(f'Cutting CMs by {byMethod} ...')
     _cuttedProgramPath = tsmarker.marker.CutCMs(videoPath=trimmedPath, indexPath=indexPath, markerPath=markerPath, byMethod=byMethod, outputFolder=workingPath.parent / workingPath.stem)
 
-def Confirm(item, epgStation):
+    # upload marking results
+    destination = Path(item['destination'])
+    CopyWithProgress(indexPath, destination / '_metadata' / Path(indexPath.name), force=True)
+    CopyWithProgress(markerPath, destination / '_metadata' / Path(markerPath.name), force=True)
+
+def Confirm(item):
     path = Path(item['path'])
+    destination = Path(item['destination'])
     cache = Path(item['cache']).expanduser()
     workingPath = cache / path.name.replace(path.suffix, '_trimmed.ts')
     logger.info(f'Marking ground truth for {workingPath.name} ...')
     cuttedProgramFolder = cache / path.stem
-    markerPath = cache / '_metadata' / (workingPath.stem + '.markermap')
+    markerPath = destination / '_metadata' / (workingPath.stem + '.markermap')
     isReEncodingNeeded = tsmarker.marker.MarkGroundTruth(clipsFolder=cuttedProgramFolder, markerPath=markerPath)
-    destination = Path(item['destination'])
-    CopyWithProgress(markerPath, destination / '_metadata' / Path(markerPath.name), force=True, epgStation=epgStation)
     if isReEncodingNeeded:
         logger.warning("*** Re-encoding is needed! ***")
     return isReEncodingNeeded
@@ -161,14 +92,15 @@ def Confirm(item, epgStation):
 def Encode(item, encoder, epgStation):
     path = Path(item['path'])
     cache = Path(item['cache']).expanduser()
+    destination = Path(item['destination'])
     workingPath = cache / path.name.replace(path.suffix, '_trimmed.ts')
 
     logger.info('Extracting EPG ...')
     epgPath, txtPath = Dump(workingPath)
 
     logger.info('Extracting program from TS ...')
-    indexPath = cache / '_metadata' / (workingPath.stem + '.ptsmap')
-    markerPath = cache / '_metadata' / (workingPath.stem + '.markermap')
+    indexPath = destination / '_metadata' / (workingPath.stem + '.ptsmap')
+    markerPath = destination / '_metadata' / (workingPath.stem + '.markermap')
 
     byGroup = item.get('encoder', {}).get('bygroup', False)
     splitNum = item.get('encoder', {}).get('split', 1)
@@ -193,14 +125,28 @@ def Encode(item, encoder, epgStation):
         encodedPath = EncodeTS(strippedTsPath, preset, cropdetect, encoder, strippedTsPath.with_suffix('.mp4'))
 
         logger.info('Uploading processed files ...')
-        destination = Path(item['destination'])
-        CopyWithProgress(encodedPath, destination / encodedPath.name.replace('_stripped', ''), epgStation=epgStation)
+        encodedFile = destination / encodedPath.name.replace('_stripped', '')
+        CopyWithProgress(encodedPath, encodedFile, epgStation=epgStation)
         if subtitlesPathList:
             for path in subtitlesPathList:
                 CopyWithProgress(path, destination / Path('Subtitles') / Path(path.name), force=True, epgStation=epgStation)
-    CopyWithProgress(indexPath, destination / '_metadata' / Path(indexPath.name), force=True, epgStation=epgStation)
     CopyWithProgress(epgPath, destination / 'EPG' / Path(epgPath.name), force=True, epgStation=epgStation)
-    CopyWithProgress(txtPath, destination / Path(txtPath.name), force=True, epgStation=epgStation)    
+    CopyWithProgress(txtPath, destination / Path(txtPath.name), force=True, epgStation=epgStation)
+
+    # add encoded items
+    with open('categoryFolders.json') as f:
+        categoryFolders = json.load(f)
+    with open('encodedFiles.json') as f:
+        encodedFiles = json.load(f)
+    if not str(destination) in categoryFolders:
+        categoryFolders.append(str(destination))
+        categoryFolders.sort(key=lambda item: (-len(str(item)), item))
+    if not encodedFile in encodedFiles:
+        encodedFiles.append(str(encodedFile))
+    with open('categoryFolders.json', 'w') as f:
+        json.dump([str(i) for i in categoryFolders], f, ensure_ascii=False, indent=True)
+    with open('encodedFiles.json', 'w') as f:
+        json.dump([str(i) for i in encodedFiles], f, ensure_ascii=False, indent=True)
 
 def Cleanup(item):
     logger.info('Cleaning up ...')
