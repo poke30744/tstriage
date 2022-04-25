@@ -95,10 +95,10 @@ def Encode(item, encoder, epgStation):
     logger.info('Extracting program from TS ...')
     indexPath = destination / '_metadata' / (workingPath.stem + '.ptsmap')
     markerPath = destination / '_metadata' / (workingPath.stem + '.markermap')
-
     byGroup = item.get('encoder', {}).get('bygroup', False)
     splitNum = item.get('encoder', {}).get('split', 1)
     programTsList = ExtractPrograms(videoPath=workingPath, indexPath=indexPath, markerPath=markerPath, byGroup=byGroup, splitNum=splitNum)
+    
     for programTsPath in programTsList:
         logger.info('Extracting subtitles ...')
         subtitlesPathList = tsmarker.subtitles.Extract(programTsPath)
