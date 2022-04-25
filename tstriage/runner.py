@@ -54,27 +54,28 @@ class Runner:
             if path.is_dir() and not path.name in ('_metadata', 'EPG', 'Subtitles'):
                 categoryFolders.append(path)
             elif path.suffix == '.mp4':
-                encodedFiles.append(path)
+                encodedFiles.append(path.name)
         # sort by length (long to short)
         categoryFolders.sort(key=lambda item: (-len(str(item)), item))
-        with open('categoryFolders.json', 'w') as f:
+        with (self.uncategoried / 'categoryFolders.json').open('w') as f:
             json.dump([str(i) for i in categoryFolders], f, ensure_ascii=False, indent=True)
-        with open('encodedFiles.json', 'w') as f:
+        with (self.uncategoried / 'encodedFiles.json').open('w') as f:
             json.dump([str(i) for i in encodedFiles], f, ensure_ascii=False, indent=True)
 
     def Categorize(self):
-        if not Path('categoryFolders.json').exists() or not Path('encodedFiles.json').exists():
+        if not (self.uncategoried / 'categoryFolders.json').exists() or not (self.uncategoried / 'encodedFiles.json').exists():
             self.RefreshNAS()
-        with open('categoryFolders.json') as f:
+        with (self.uncategoried / 'categoryFolders.json').open() as f:
             categoryFolders = [ Path(i) for i in json.load(f) ]
-        with open('encodedFiles.json') as f:
-            encodedFiles = [ Path(i) for i in json.load(f) ]
+        with (self.uncategoried / 'encodedFiles.json').open() as f:
+            encodedFiles = json.load(f)
         itemsToProcess = []
         for path in [ path for path in Path(self.uncategoried).glob('*') if path.suffix in ('.ts', '.m2ts') ]:
             # check if this file has been encoded
+             # check if this file has been encoded
             hadBeenEncoded = False
             for encodedFile in encodedFiles:
-                if path.stem in encodedFile.stem:
+                if path.stem in encodedFile:
                     hadBeenEncoded = True
                     break
             if hadBeenEncoded:
@@ -150,8 +151,22 @@ class Runner:
             with path.open(encoding='utf-8') as f:
                 item = json.load(f)
             try:
-                Encode(item=item, encoder=self.encoder, epgStation=self.epgStation)
+                encodedFile = Encode(item=item, encoder=self.encoder, epgStation=self.epgStation)
                 path.rename(path.with_suffix('.toconfirm'))
+                # add encoded items
+                with (self.uncategoried / 'categoryFolders.json').open() as f:
+                    categoryFolders = json.load(f)
+                with (self.uncategoried / 'encodedFiles.json').open() as f:
+                    encodedFiles = json.load(f)
+                if not item['destination'] in categoryFolders:
+                    categoryFolders.append(item['destination'])
+                    categoryFolders.sort(key=lambda item: (-len(str(item)), item))
+                if not encodedFile in encodedFiles:
+                    encodedFiles.append(encodedFile.name)
+                with (self.uncategoried / 'categoryFolders.json').open('w') as f:
+                    json.dump([str(i) for i in categoryFolders], f, ensure_ascii=False, indent=True)
+                with (self.uncategoried / 'encodedFiles.json').open('w') as f:
+                    json.dump([str(i) for i in encodedFiles], f, ensure_ascii=False, indent=True)
             except KeyboardInterrupt:
                 raise
             except:

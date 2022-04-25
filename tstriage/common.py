@@ -108,7 +108,7 @@ def ExtractPrograms(videoPath, indexPath, markerPath, byGroup, splitNum):
     if byGroup:
         for i in range(len(programClipsList)):
             clips = programClipsList[i]
-            outputPath = videoPath.with_name(videoPath.name.replace('.ts', f'_prog_{i+1}.ts'))
+            outputPath = videoPath.with_stem(f'{videoPath.stem}_prog_{i+1}')
             logger.info(f'Extracting "{outputPath.name}" ...')
             ExtractProgram(videoPath, clips, ptsMap, outputPath, quiet=False)
             programTsList.append(outputPath)
@@ -120,13 +120,13 @@ def ExtractPrograms(videoPath, indexPath, markerPath, byGroup, splitNum):
                 clips.append(programClipsList[0].pop(0))
                 if 0.95 < GetClipsDuration(clips) / programsDuration * splitNum < 1.05:
                     break
-            outputPath = videoPath.with_name(videoPath.name.replace('.ts', f'_prog_{i+1}.ts'))
+            outputPath = videoPath.with_stem(f'{videoPath.stem}_prog_{i+1}')
             logger.info(f'Extracting "{outputPath.name}" ...')
             ExtractProgram(videoPath, clips, ptsMap, outputPath, quiet=False)
             programTsList.append(outputPath)
     else:
         clips = programClipsList[0]
-        outputPath = videoPath.with_name(videoPath.name.replace('.ts', f'_prog.ts'))
+        outputPath = videoPath.with_stem(f'{videoPath.stem}_prog')
         logger.info(f'Extracting "{outputPath.name}" ...')
         ExtractProgram(videoPath, clips, ptsMap, outputPath, quiet=False)
         programTsList.append(outputPath)

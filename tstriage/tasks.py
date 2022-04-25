@@ -3,7 +3,6 @@ import shutil, logging, os, json
 from tscutter.common import EncodingError
 import tscutter.analyze, tsmarker.marker, tsmarker.common, tsmarker.ensemble
 from .common import CopyWithProgress, ExtractPrograms
-from .splitter import Trim
 from .epg import Dump
 from .encode import StripAndRepackTS, StripTS, EncodeTS
 
@@ -14,24 +13,18 @@ def Mark(item, epgStation):
     cache = Path(item['cache']).expanduser()
     logger.info('Copying TS file to working folder ...')
     workingPath = cache / path.name
-    trimmedPath = cache / path.name.replace(path.suffix, '_trimmed.ts')
-    if not trimmedPath.exists():
+    if not workingPath.exists():
         CopyWithProgress(path, workingPath, epgStation=epgStation)
-        logger.info('Trimming original TS ...')
-        trimmedPath = Trim(videoPath=workingPath, outputPath=trimmedPath)
-        workingPath.unlink()
-
+    
     logger.info('Analyzing to split ...')
     minSilenceLen = item.get('cutter', {}).get('minSilenceLen', 800)
     silenceThresh =  item.get('cutter', {}).get('silenceThresh', -80)
-    indexPath = tscutter.analyze.AnalyzeVideo(videoPath=trimmedPath, silenceThresh=silenceThresh, minSilenceLen=minSilenceLen)
+    indexPath = workingPath.with_suffix('.ptsmap')
+    tscutter.analyze.AnalyzeVideo(videoPath=workingPath, indexPath=indexPath, silenceThresh=silenceThresh, minSilenceLen=minSilenceLen)
 
     logger.info('Marking ...')
-    markerPath = tsmarker.marker.MarkVideo(
-        videoPath=trimmedPath,
-        indexPath=None,
-        markerPath=None,
-        methods=['subtitles', 'clipinfo', 'logo'])
+    markerPath = workingPath.with_suffix('.markermap')
+    tsmarker.marker.MarkVideo(videoPath=workingPath, indexPath=indexPath, markerPath=markerPath, methods=['subtitles', 'clipinfo', 'logo'])
 
     # create the dataset
     noEnsemble = item['marker'].get('noEnsemble', False)
@@ -69,7 +62,7 @@ def Mark(item, epgStation):
     else:
         byMethod = 'subtitles'
     logger.info(f'Cutting CMs by {byMethod} ...')
-    _cuttedProgramPath = tsmarker.marker.CutCMs(videoPath=trimmedPath, indexPath=indexPath, markerPath=markerPath, byMethod=byMethod, outputFolder=workingPath.parent / workingPath.stem)
+    _cuttedProgramPath = tsmarker.marker.CutCMs(videoPath=workingPath, indexPath=indexPath, markerPath=markerPath, byMethod=byMethod, outputFolder=workingPath.parent / workingPath.stem)
 
     # upload marking results
     destination = Path(item['destination'])
@@ -80,7 +73,8 @@ def Confirm(item):
     path = Path(item['path'])
     destination = Path(item['destination'])
     cache = Path(item['cache']).expanduser()
-    workingPath = cache / path.name.replace(path.suffix, '_trimmed.ts')
+    workingPath = cache / path
+    #workingPath = cache / path.name.replace(path.suffix, '_trimmed.ts')
     logger.info(f'Marking ground truth for {workingPath.name} ...')
     cuttedProgramFolder = cache / path.stem
     markerPath = destination / '_metadata' / (workingPath.stem + '.markermap')
@@ -93,7 +87,7 @@ def Encode(item, encoder, epgStation):
     path = Path(item['path'])
     cache = Path(item['cache']).expanduser()
     destination = Path(item['destination'])
-    workingPath = cache / path.name.replace(path.suffix, '_trimmed.ts')
+    workingPath = cache / path.name
 
     logger.info('Extracting EPG ...')
     epgPath, txtPath = Dump(workingPath)
@@ -123,6 +117,7 @@ def Encode(item, encoder, epgStation):
         preset = item['encoder']['preset']
         cropdetect = item['encoder'].get('cropdetect')
         encodedPath = EncodeTS(strippedTsPath, preset, cropdetect, encoder, strippedTsPath.with_suffix('.mp4'))
+        strippedTsPath.unlink()
 
         logger.info('Uploading processed files ...')
         encodedFile = destination / encodedPath.name.replace('_stripped', '')
@@ -132,21 +127,7 @@ def Encode(item, encoder, epgStation):
                 CopyWithProgress(path, destination / Path('Subtitles') / Path(path.name), force=True, epgStation=epgStation)
     CopyWithProgress(epgPath, destination / 'EPG' / Path(epgPath.name), force=True, epgStation=epgStation)
     CopyWithProgress(txtPath, destination / Path(txtPath.name), force=True, epgStation=epgStation)
-
-    # add encoded items
-    with open('categoryFolders.json') as f:
-        categoryFolders = json.load(f)
-    with open('encodedFiles.json') as f:
-        encodedFiles = json.load(f)
-    if not str(destination) in categoryFolders:
-        categoryFolders.append(str(destination))
-        categoryFolders.sort(key=lambda item: (-len(str(item)), item))
-    if not encodedFile in encodedFiles:
-        encodedFiles.append(str(encodedFile))
-    with open('categoryFolders.json', 'w') as f:
-        json.dump([str(i) for i in categoryFolders], f, ensure_ascii=False, indent=True)
-    with open('encodedFiles.json', 'w') as f:
-        json.dump([str(i) for i in encodedFiles], f, ensure_ascii=False, indent=True)
+    return encodedFile
 
 def Cleanup(item):
     logger.info('Cleaning up ...')
