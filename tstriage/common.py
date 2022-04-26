@@ -38,6 +38,8 @@ def CopyWithProgress(srcPath, dstPath, force=False, epgStation=None):
         logger.info(f'Skipped copying {srcPath.name}')
         return
     else:
+        if dstPath.exists():
+            logger.warn(f'Removing {dstPath} ...')
         logger.info(f'Copying {srcPath.name} ...')
     Path(dstPath).parent.mkdir(parents=True, exist_ok=True)
     with open(srcPath, 'rb') as rf:

@@ -13,8 +13,7 @@ def Mark(item, epgStation):
     cache = Path(item['cache']).expanduser()
     logger.info('Copying TS file to working folder ...')
     workingPath = cache / path.name
-    if not workingPath.exists():
-        CopyWithProgress(path, workingPath, epgStation=epgStation)
+    CopyWithProgress(path, workingPath, epgStation=epgStation)
     
     logger.info('Analyzing to split ...')
     minSilenceLen = item.get('cutter', {}).get('minSilenceLen', 800)
@@ -26,28 +25,38 @@ def Mark(item, epgStation):
     markerPath = workingPath.with_suffix('.markermap')
     tsmarker.marker.MarkVideo(videoPath=workingPath, indexPath=indexPath, markerPath=markerPath, methods=['subtitles', 'clipinfo', 'logo'])
 
-    # create the dataset
     noEnsemble = item['marker'].get('noEnsemble', False)
     outputFolder = Path(item['destination'])
     byEnsemble = not noEnsemble
-    if byEnsemble and (outputFolder / '_metadata').exists() and len(os.listdir(outputFolder / '_metadata')) > 0:
-        datasetCsv = Path(outputFolder.with_suffix('.csv').name)
-        tsmarker.ensemble.CreateDataset(
-            folder=outputFolder, 
-            csvPath=datasetCsv, 
-            properties=[ 'subtitles', 'position', 'duration', 'duration_prev', 'duration_next', 'logo'])
+    if byEnsemble:
+        # find metadata folder
+        if (outputFolder / '_metadata').exists() and len(os.listdir(outputFolder / '_metadata')) > 10:
+            metadataPath = outputFolder
+            logger.info(f'Using metadata in {metadataPath} ...')
+        else:
+            metadataPath = outputFolder.parent
+            logger.info(f'Trying to use metadata in {metadataPath} ...')
     else:
         byEnsemble = False
     
     if byEnsemble:
-        # train the model using Adaboost
-        dataset = tsmarker.ensemble.LoadDataset(csvPath=datasetCsv)
-        columns = dataset['columns']
-        clf = tsmarker.ensemble.Train(dataset)
-
-        # predict
-        model = clf, columns
-        tsmarker.ensemble.Mark(model=model, markerPath=markerPath)
+        # generate dataset
+        datasetCsv = workingPath.with_suffix('.csv')
+        df = tsmarker.ensemble.CreateDataset(
+            folder=metadataPath, 
+            csvPath=datasetCsv, 
+            properties=[ 'subtitles', 'position', 'duration', 'duration_prev', 'duration_next', 'logo'])
+        if df is not None:
+            # train the model using Adaboost
+            dataset = tsmarker.ensemble.LoadDataset(csvPath=datasetCsv)
+            columns = dataset['columns']
+            clf = tsmarker.ensemble.Train(dataset)
+            # predict
+            model = clf, columns
+            tsmarker.ensemble.Mark(model=model, markerPath=markerPath)
+        else:
+            logger.warn(f'No metadata is found in {metadataPath}!')
+            byEnsemble = False
 
     _, markerMap = tsmarker.common.LoadExistingData(indexPath, markerPath)
     noSubtitles = any([ v['subtitles'] == 0.5 for _, v in markerMap.items() ])
