@@ -8,21 +8,33 @@ from .encode import StripAndRepackTS, StripTS, EncodeTS
 
 logger = logging.getLogger('tstriage.tasks')
 
+def Analyze(item, epgStation):
+    path = Path(item['path'])
+    cache = Path(item['cache']).expanduser()
+    destination = Path(item['destination'])
+
+    logger.info('Copying TS file to working folder ...')
+    workingPath = cache / path.name
+    CopyWithProgress(path, workingPath, epgStation=epgStation)
+
+    logger.info('Analyzing to split ...')
+    indexPath = destination / '_metadata' / workingPath.with_suffix('.ptsmap').name
+    minSilenceLen = item.get('cutter', {}).get('minSilenceLen', 800)
+    silenceThresh =  item.get('cutter', {}).get('silenceThresh', -80)
+    tscutter.analyze.AnalyzeVideo(videoPath=workingPath, indexPath=indexPath, silenceThresh=silenceThresh, minSilenceLen=minSilenceLen)
+
 def Mark(item, epgStation):
     path = Path(item['path'])
     cache = Path(item['cache']).expanduser()
+    destination = Path(item['destination'])
+
     logger.info('Copying TS file to working folder ...')
     workingPath = cache / path.name
     CopyWithProgress(path, workingPath, epgStation=epgStation)
     
-    logger.info('Analyzing to split ...')
-    minSilenceLen = item.get('cutter', {}).get('minSilenceLen', 800)
-    silenceThresh =  item.get('cutter', {}).get('silenceThresh', -80)
-    indexPath = workingPath.with_suffix('.ptsmap')
-    tscutter.analyze.AnalyzeVideo(videoPath=workingPath, indexPath=indexPath, silenceThresh=silenceThresh, minSilenceLen=minSilenceLen)
-
     logger.info('Marking ...')
-    markerPath = workingPath.with_suffix('.markermap')
+    indexPath = destination / '_metadata' / workingPath.with_suffix('.ptsmap').name
+    markerPath = destination / '_metadata' /  workingPath.with_suffix('.markermap').name
     tsmarker.marker.MarkVideo(videoPath=workingPath, indexPath=indexPath, markerPath=markerPath, methods=['subtitles', 'clipinfo', 'logo'])
 
     noEnsemble = item['marker'].get('noEnsemble', False)
@@ -36,10 +48,6 @@ def Mark(item, epgStation):
         else:
             metadataPath = outputFolder.parent
             logger.info(f'Trying to use metadata in {metadataPath} ...')
-    else:
-        byEnsemble = False
-    
-    if byEnsemble:
         # generate dataset
         datasetCsv = workingPath.with_suffix('.csv')
         df = tsmarker.ensemble.CreateDataset(
@@ -71,19 +79,13 @@ def Mark(item, epgStation):
     else:
         byMethod = 'subtitles'
     logger.info(f'Cutting CMs by {byMethod} ...')
-    _cuttedProgramPath = tsmarker.marker.CutCMs(videoPath=workingPath, indexPath=indexPath, markerPath=markerPath, byMethod=byMethod, outputFolder=workingPath.parent / workingPath.stem)
-
-    # upload marking results
-    destination = Path(item['destination'])
-    CopyWithProgress(indexPath, destination / '_metadata' / Path(indexPath.name), force=True)
-    CopyWithProgress(markerPath, destination / '_metadata' / Path(markerPath.name), force=True)
+    tsmarker.marker.CutCMs(videoPath=workingPath, indexPath=indexPath, markerPath=markerPath, byMethod=byMethod, outputFolder=workingPath.parent / workingPath.stem)
 
 def Confirm(item):
     path = Path(item['path'])
     destination = Path(item['destination'])
     cache = Path(item['cache']).expanduser()
     workingPath = cache / path
-    #workingPath = cache / path.name.replace(path.suffix, '_trimmed.ts')
     logger.info(f'Marking ground truth for {workingPath.name} ...')
     cuttedProgramFolder = cache / path.stem
     markerPath = destination / '_metadata' / (workingPath.stem + '.markermap')

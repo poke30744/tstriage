@@ -5,7 +5,7 @@ import logging
 import unicodedata
 from .common import WindowsInhibitor
 from .epgstation import EPGStation
-from .tasks import Mark, Encode, Confirm, Cleanup
+from .tasks import Analyze, Mark, Encode, Confirm, Cleanup
 
 logger = logging.getLogger('tstriage.runner')
 
@@ -72,7 +72,6 @@ class Runner:
         itemsToProcess = []
         for path in [ path for path in Path(self.uncategoried).glob('*') if path.suffix in ('.ts', '.m2ts') ]:
             # check if this file has been encoded
-             # check if this file has been encoded
             hadBeenEncoded = False
             for encodedFile in encodedFiles:
                 if path.stem in encodedFile:
@@ -117,7 +116,7 @@ class Runner:
                 settingsPath = FindTsTriageSettings(encodeTo, self.destination)
                 with settingsPath.open() as f:
                     settings = json.load(f)
-                newJsonPath = path.with_suffix('.tomark')
+                newJsonPath = path.with_suffix('.toanalyze')
                 path.rename(newJsonPath)
                 newItem = {
                     'path': item['path'],
@@ -132,6 +131,19 @@ class Runner:
                     json.dump(newItem, f, ensure_ascii=False, indent=True)
             else:
                 logger.warn(f'More information is needed: {item["path"]}')
+
+    def Analyze(self):
+        for path in self.uncategoried.glob('*.toanalyze'):
+            with path.open(encoding='utf-8') as f:
+                item = json.load(f)
+            try:
+                Analyze(item=item, epgStation=self.epgStation)
+                path.rename(path.with_suffix('.tomark'))
+            except KeyboardInterrupt:
+                raise
+            except:
+                logger.exception(f'in analyzing "{path}":')
+                path.rename(path.with_suffix('.error'))
 
     def Mark(self):
         for path in self.uncategoried.glob('*.tomark'):
@@ -202,6 +214,9 @@ class Runner:
                 self.Categorize()
             elif task == 'list':
                 self.List()
+            elif task == 'analyze':
+                with WindowsInhibitor() as wi:
+                    self.Analyze()
             elif task == 'mark':
                 with WindowsInhibitor() as wi:
                     self.Mark()
@@ -216,7 +231,7 @@ class Runner:
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Python script to triage TS files')
     parser.add_argument('--config', '-c', required=True, help='configuration file path')
-    parser.add_argument('--task', '-t', required=True, nargs='+', choices=['refresh', 'categorize', 'list', 'mark', 'confirm', 'encode', 'cleanup'], help='tasks to run')
+    parser.add_argument('--task', '-t', required=True, nargs='+', choices=['refresh', 'categorize', 'list', 'analyze', 'mark', 'confirm', 'encode', 'cleanup'], help='tasks to run')
     parser.add_argument('--daemon', '-d', type=int, help='keep running')
 
     args = parser.parse_args()

@@ -34,6 +34,8 @@ class WindowsInhibitor:
 
 def CopyWithProgress(srcPath, dstPath, force=False, epgStation=None):
     srcPath, dstPath = Path(srcPath), Path(dstPath)
+    if not srcPath.exists():
+        raise FileNotFoundError()
     if not force and dstPath.is_file() and srcPath.stat().st_size == dstPath.stat().st_size and round(srcPath.stat().st_mtime) == round(dstPath.stat().st_mtime):
         logger.info(f'Skipped copying {srcPath.name}')
         return

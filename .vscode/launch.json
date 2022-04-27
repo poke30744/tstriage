@@ -48,6 +48,19 @@
             ]
         },
         {
+            "name": "runner -t analyze",
+            "type": "python",
+            "request": "launch",
+            "justMyCode": false,
+            "module": "tstriage.runner",
+            "args": [
+                "-c",
+                "triage.sample.json",
+                "-t",
+                "analyze"
+            ]
+        },
+        {
             "name": "runner -t mark",
             "type": "python",
             "request": "launch",
