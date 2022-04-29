@@ -2,6 +2,7 @@ pipeline {
     agent none
     options {
         skipStagesAfterUnstable()
+        buildDiscarder logRotator(numToKeepStr: '10')
     }
     parameters {
         booleanParam defaultValue: true, description: 'Publish to Test PyPI', name: 'PublishTestPyPI'
