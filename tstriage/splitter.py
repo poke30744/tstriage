@@ -25,6 +25,7 @@ def Split(videoPath):
     return splittedTs
 
 def Trim(videoPath, outputPath=None):
+    videoPath = Path(videoPath)
     splittedTs = Split(videoPath)
     while True:
         if splittedTs[0].stat().st_size < TRIM_THRESHOLD:
