@@ -141,11 +141,14 @@ def EncodePipeline(inFile, ptsMap, markerMap, byGroup, preset, encoder):
                 # strip
                 stripTsP = subprocess.Popen(StripTsCmd('-', '-'), stdin=subprocess.PIPE, stdout=encodeTsP.stdin, stderr=stripLogs)
                 # subtitles
+                startupinfo = subprocess.STARTUPINFO(wShowWindow=6, dwFlags=subprocess.STARTF_USESHOWWINDOW) if hasattr(subprocess, 'STARTUPINFO') else None
+                creationflags = subprocess.CREATE_NEW_CONSOLE if hasattr(subprocess, 'CREATE_NEW_CONSOLE') else 0
                 subtitlesP = subprocess.Popen(    
                     ['Captain2AssC.cmd', '-', outFile.with_suffix('') ],
                     stdin=subprocess.PIPE,
-                    startupinfo=subprocess.STARTUPINFO(wShowWindow=6, dwFlags=subprocess.STARTF_USESHOWWINDOW),
-                    creationflags=subprocess.CREATE_NEW_CONSOLE)
+                    startupinfo=startupinfo,
+                    creationflags=creationflags,
+                    shell=True)
                 with stripTsP, subtitlesP:
                     # extract (data pump)
                     teeFile = Tee(outPipes=[stripTsP.stdin, subtitlesP.stdin])

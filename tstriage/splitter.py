@@ -12,10 +12,13 @@ def Split(videoPath):
     videoPath = Path(videoPath).absolute()
     if not videoPath.is_file():
         raise TsFileNotFound(f'"{videoPath.name}" not found!')
+    startupinfo = subprocess.STARTUPINFO(wShowWindow=6, dwFlags=subprocess.STARTF_USESHOWWINDOW) if hasattr(subprocess, 'STARTUPINFO') else None
+    creationflags = subprocess.CREATE_NEW_CONSOLE if hasattr(subprocess, 'CREATE_NEW_CONSOLE') else 0
     pipeObj = subprocess.Popen(
         f'TsSplitter.cmd "{videoPath}"',
-        startupinfo=subprocess.STARTUPINFO(wShowWindow=6, dwFlags=subprocess.STARTF_USESHOWWINDOW),
-        creationflags=subprocess.CREATE_NEW_CONSOLE)
+        startupinfo=startupinfo,
+        creationflags=creationflags,
+        shell=True)
     pipeObj.wait()
     splittedTs1 = [ path for path in videoPath.parent.glob(f'*{videoPath.suffix}') if path.stem.startswith(videoPath.stem + '_') ]
     splittedTs2 = [ path for path in splittedTs1 if '_HD' in path.stem or '_CS' in path.stem ]
