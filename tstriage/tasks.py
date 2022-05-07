@@ -1,10 +1,10 @@
 from pathlib import Path
-import shutil, logging, os, json
+import shutil, logging, os
 from tscutter.common import EncodingError
 import tscutter.analyze, tsmarker.marker, tsmarker.common, tsmarker.ensemble
 from .common import CopyWithProgress, ExtractPrograms
 from .epg import Dump
-from .encode import StripAndRepackTS, StripTS, EncodeTS
+from .encode import InputFile
 
 logger = logging.getLogger('tstriage.tasks')
 
@@ -21,7 +21,7 @@ def Analyze(item, epgStation):
     indexPath = destination / '_metadata' / workingPath.with_suffix('.ptsmap').name
     minSilenceLen = item.get('cutter', {}).get('minSilenceLen', 800)
     silenceThresh =  item.get('cutter', {}).get('silenceThresh', -80)
-    tscutter.analyze.AnalyzeVideo(videoPath=workingPath, indexPath=indexPath, silenceThresh=silenceThresh, minSilenceLen=minSilenceLen)
+    tscutter.analyze.AnalyzeVideo(inputFile=InputFile(workingPath), indexPath=indexPath, silenceThresh=silenceThresh, minSilenceLen=minSilenceLen)
 
 def Mark(item, epgStation):
     path = Path(item['path'])
@@ -115,19 +115,21 @@ def Encode(item, encoder, epgStation):
         subtitlesPathList = tsmarker.subtitles.Extract(programTsPath)
         subtitlesPathList = [ path.replace(path.with_name(path.name.replace('_prog.', '_prog.jpn.'))) for path in subtitlesPathList ]
 
+        inputFile = InputFile(programTsPath)
         if item.get('encoder', {}).get('repack', False):
-            strippedTsPath = StripAndRepackTS(programTsPath)
+            strippedTsPath = inputFile.StripAndRepackTS()
         else:
             try:
-                strippedTsPath = StripTS(programTsPath, fixAudio=True)
+                strippedTsPath = inputFile.StripTS(fixAudio=True)
             except EncodingError:
                 logger.info('Striping failed again, trying to strip without mapping ...')
-                strippedTsPath = StripTS(programTsPath, nomap=True)
+                strippedTsPath = inputFile.StripTS(nomap=True)
         programTsPath.unlink()
 
         preset = item['encoder']['preset']
         cropdetect = item['encoder'].get('cropdetect')
-        encodedPath = EncodeTS(strippedTsPath, preset, cropdetect, encoder, strippedTsPath.with_suffix('.mp4'))
+        inputFile = InputFile(strippedTsPath)
+        encodedPath = inputFile.EncodeTS(preset, cropdetect, encoder, strippedTsPath.with_suffix('.mp4'))
         strippedTsPath.unlink()
 
         logger.info('Uploading processed files ...')

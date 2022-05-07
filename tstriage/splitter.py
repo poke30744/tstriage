@@ -1,7 +1,7 @@
 import subprocess, argparse, logging
 from pathlib import Path
 from tscutter.common import TsFileNotFound, InvalidTsFormat
-from tscutter.ffmpeg import GetInfo
+from tscutter.ffmpeg import InputFile
 
 TRIM_THRESHOLD = 10 * 1024 * 1024
 BUF_SIZE = 1024 * 1024
@@ -49,7 +49,7 @@ def Trim(videoPath, outputPath=None):
                         break
                     wf.write(data)
             path.unlink()
-    if GetInfo(outputPath)['duration'] / GetInfo(videoPath)['duration'] < 0.95:
+    if InputFile(outputPath).GetInfo()['duration'] / InputFile(videoPath).GetInfo()['duration'] < 0.95:
         # trimmed more than expected
         raise InvalidTsFormat(f'"{videoPath.name}" is invalid!')
     return outputPath
