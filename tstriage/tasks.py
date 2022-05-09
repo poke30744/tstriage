@@ -100,6 +100,10 @@ def Encode(item, encoder, epgStation):
     destination = Path(item['destination'])
     workingPath = cache / path.name
 
+    logger.info('Copying TS file to working folder ...')
+    workingPath = cache / path.name
+    CopyWithProgress(path, workingPath, epgStation=epgStation)
+
     logger.info('Extracting EPG ...')
     epgPath, txtPath = Dump(workingPath)
 
