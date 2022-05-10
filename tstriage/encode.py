@@ -67,7 +67,7 @@ def CheckEncodingOutput(inputInfo, outputPath):
 
 class InputFile(tsmarker.logo.InputFile):
     def FindVideoBox(self, ss=None, to=None, quiet=False):
-        info = self.GetInfo(path)
+        info = self.GetInfo()
         if ss is None or to is None:
             ss, to = 0, info['duration']
         with tempfile.TemporaryDirectory(prefix='aspect_ratio_') as tmpLogoFolder:
