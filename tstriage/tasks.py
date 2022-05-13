@@ -1,7 +1,10 @@
 from pathlib import Path
 import shutil, logging, os
-from tscutter.common import EncodingError
-import tscutter.analyze, tsmarker.marker, tsmarker.common, tsmarker.ensemble
+from tscutter.common import EncodingError, PtsMap
+from tscutter.analyze import AnalyzeVideo
+import tsmarker.common
+from tsmarker.marker import MarkVideo
+from tsmarker import subtitles, ensemble, groundtruth
 from .common import CopyWithProgress, ExtractPrograms
 from .epg import Dump
 from .encode import InputFile
@@ -21,7 +24,7 @@ def Analyze(item, epgStation):
     indexPath = destination / '_metadata' / workingPath.with_suffix('.ptsmap').name
     minSilenceLen = item.get('cutter', {}).get('minSilenceLen', 800)
     silenceThresh =  item.get('cutter', {}).get('silenceThresh', -80)
-    tscutter.analyze.AnalyzeVideo(inputFile=InputFile(workingPath), indexPath=indexPath, silenceThresh=silenceThresh, minSilenceLen=minSilenceLen)
+    AnalyzeVideo(inputFile=InputFile(workingPath), indexPath=indexPath, silenceThresh=silenceThresh, minSilenceLen=minSilenceLen)
 
 def Mark(item, epgStation):
     path = Path(item['path'])
@@ -35,7 +38,7 @@ def Mark(item, epgStation):
     logger.info('Marking ...')
     indexPath = destination / '_metadata' / workingPath.with_suffix('.ptsmap').name
     markerPath = destination / '_metadata' /  workingPath.with_suffix('.markermap').name
-    tsmarker.marker.MarkVideo(videoPath=workingPath, indexPath=indexPath, markerPath=markerPath, methods=['subtitles', 'clipinfo', 'logo'])
+    MarkVideo(videoPath=workingPath, indexPath=indexPath, markerPath=markerPath, methods=['subtitles', 'clipinfo', 'logo'])
 
     noEnsemble = item['marker'].get('noEnsemble', False)
     outputFolder = Path(item['destination'])
@@ -50,36 +53,45 @@ def Mark(item, epgStation):
             logger.info(f'Trying to use metadata in {metadataPath} ...')
         # generate dataset
         datasetCsv = workingPath.with_suffix('.csv')
-        df = tsmarker.ensemble.CreateDataset(
+        df = ensemble.CreateDataset(
             folder=metadataPath, 
             csvPath=datasetCsv, 
             properties=[ 'subtitles', 'position', 'duration', 'duration_prev', 'duration_next', 'logo'])
         if df is not None:
             # train the model using Adaboost
-            dataset = tsmarker.ensemble.LoadDataset(csvPath=datasetCsv)
+            dataset = ensemble.LoadDataset(csvPath=datasetCsv)
             columns = dataset['columns']
-            clf = tsmarker.ensemble.Train(dataset)
+            clf = ensemble.Train(dataset)
             # predict
             model = clf, columns
-            tsmarker.ensemble.Mark(model=model, markerPath=markerPath)
+            ensemble.MarkerMap(markerPath, PtsMap(indexPath)).MarkAll(model)
         else:
             logger.warn(f'No metadata is found in {metadataPath}!')
             byEnsemble = False
 
-    _, markerMap = tsmarker.common.LoadExistingData(indexPath, markerPath)
-    noSubtitles = any([ v['subtitles'] == 0.5 for _, v in markerMap.items() ])
+def Cut(item, epgStation):
+    path = Path(item['path'])
+    cache = Path(item['cache']).expanduser()
+    destination = Path(item['destination'])
+
+    logger.info('Copying TS file to working folder ...')
+    workingPath = cache / path.name
+    CopyWithProgress(path, workingPath, epgStation=epgStation)
+    
+    logger.info('Cutting ...')
+    indexPath = destination / '_metadata' / workingPath.with_suffix('.ptsmap').name
+    markerPath = destination / '_metadata' /  workingPath.with_suffix('.markermap').name
+    markerMap = tsmarker.common.MarkerMap(markerPath, PtsMap(indexPath))
 
     # cut the video by marking result for review
-    if '_groundtruth' in list(markerMap.items())[0][1]:
+    if '_groundtruth' in markerMap.Properties():
         byMethod = '_groundtruth'
-    elif byEnsemble:
+    elif '_ensemble' in markerMap.Properties():
         byMethod = '_ensemble'
-    elif noSubtitles:
-        byMethod = 'logo'
     else:
         byMethod = 'subtitles'
     logger.info(f'Cutting CMs by {byMethod} ...')
-    tsmarker.marker.CutCMs(videoPath=workingPath, indexPath=indexPath, markerPath=markerPath, byMethod=byMethod, outputFolder=workingPath.parent / workingPath.stem)
+    markerMap.Cut(videoPath=workingPath, byMethod=byMethod, outputFolder=workingPath.with_suffix(''))
 
 def Confirm(item):
     path = Path(item['path'])
@@ -89,7 +101,8 @@ def Confirm(item):
     logger.info(f'Marking ground truth for {workingPath.name} ...')
     cuttedProgramFolder = cache / path.stem
     markerPath = destination / '_metadata' / (workingPath.stem + '.markermap')
-    isReEncodingNeeded = tsmarker.marker.MarkGroundTruth(clipsFolder=cuttedProgramFolder, markerPath=markerPath)
+    indexPath = markerPath.with_suffix('.ptsmap')
+    isReEncodingNeeded = groundtruth.MarkerMap(markerPath, PtsMap(indexPath)).MarkAll(clipsFolder=cuttedProgramFolder)
     if isReEncodingNeeded:
         logger.warning("*** Re-encoding is needed! ***")
     return isReEncodingNeeded
@@ -116,7 +129,7 @@ def Encode(item, encoder, epgStation):
     
     for programTsPath in programTsList:
         logger.info('Extracting subtitles ...')
-        subtitlesPathList = tsmarker.subtitles.Extract(programTsPath)
+        subtitlesPathList = subtitles.Extract(programTsPath)
         subtitlesPathList = [ path.replace(path.with_name(path.name.replace('_prog.', '_prog.jpn.'))) for path in subtitlesPathList ]
 
         inputFile = InputFile(programTsPath)

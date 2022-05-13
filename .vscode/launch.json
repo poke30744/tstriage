@@ -74,6 +74,19 @@
             ]
         },
         {
+            "name": "runner -t cut",
+            "type": "python",
+            "request": "launch",
+            "justMyCode": false,
+            "module": "tstriage.runner",
+            "args": [
+                "-c",
+                "triage.sample.json",
+                "-t",
+                "cut"
+            ]
+        },
+        {
             "name": "runner -t confirm",
             "type": "python",
             "request": "launch",

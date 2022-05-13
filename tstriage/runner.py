@@ -5,7 +5,7 @@ import logging
 import unicodedata
 from .common import WindowsInhibitor
 from .epgstation import EPGStation
-from .tasks import Analyze, Mark, Encode, Confirm, Cleanup
+from .tasks import Analyze, Mark, Cut, Encode, Confirm, Cleanup
 
 logger = logging.getLogger('tstriage.runner')
 
@@ -151,11 +151,24 @@ class Runner:
                 item = json.load(f)
             try:
                 Mark(item=item, epgStation=self.epgStation)
-                path.rename(path.with_suffix('.toencode'))
+                path.rename(path.with_suffix('.tocut'))
             except KeyboardInterrupt:
                 raise
             except:
                 logger.exception(f'in marking "{path}":')
+                path.rename(path.with_suffix('.error'))
+
+    def Cut(self):
+        for path in self.uncategoried.glob('*.tocut'):
+            with path.open(encoding='utf-8') as f:
+                item = json.load(f)
+            try:
+                Cut(item=item, epgStation=self.epgStation)
+                path.rename(path.with_suffix('.toencode'))
+            except KeyboardInterrupt:
+                raise
+            except:
+                logger.exception(f'in cutting "{path}":')
                 path.rename(path.with_suffix('.error'))
 
     def Encode(self):
@@ -220,6 +233,8 @@ class Runner:
             elif task == 'mark':
                 with WindowsInhibitor() as wi:
                     self.Mark()
+            elif task == 'cut':
+                    self.Cut()
             elif task == 'encode':
                 with WindowsInhibitor() as wi:
                     self.Encode()
@@ -231,7 +246,7 @@ class Runner:
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Python script to triage TS files')
     parser.add_argument('--config', '-c', required=True, help='configuration file path')
-    parser.add_argument('--task', '-t', required=True, nargs='+', choices=['refresh', 'categorize', 'list', 'analyze', 'mark', 'confirm', 'encode', 'cleanup'], help='tasks to run')
+    parser.add_argument('--task', '-t', required=True, nargs='+', choices=['refresh', 'categorize', 'list', 'analyze', 'mark', 'cut', 'confirm', 'encode', 'cleanup'], help='tasks to run')
     parser.add_argument('--daemon', '-d', type=int, help='keep running')
 
     args = parser.parse_args()

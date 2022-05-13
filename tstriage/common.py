@@ -3,8 +3,8 @@ import shutil
 from pathlib import Path
 import logging
 from tqdm import tqdm
-from tscutter.common import CopyPart
-from tsmarker.common import LoadExistingData
+from tscutter.common import CopyPart, PtsMap
+from tsmarker.common import MarkerMap
 
 logger = logging.getLogger('tstriage.common')
 
@@ -106,7 +106,7 @@ def GetClipsDuration(clips):
     return duration
 
 def ExtractPrograms(videoPath, indexPath, markerPath, byGroup, splitNum):
-    ptsMap, markerMap = LoadExistingData(indexPath, markerPath)
+    ptsMap, markerMap = PtsMap(indexPath).data, MarkerMap(markerPath, None).data
     programClipsList = ExtractProgramList(markerMap, byGroup)
     programTsList = []
     if byGroup:
