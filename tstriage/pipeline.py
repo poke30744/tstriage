@@ -4,41 +4,13 @@ from threading import Thread
 from tqdm import tqdm
 import numpy as np
 from PIL import Image
-from tscutter.common import ClipToFilename
-from tsmarker.common import GetClips, SelectClips
+from tscutter.common import ClipToFilename, PtsMap
 from tsmarker.logo import drawEdges, cv2imread, cv2imwrite
+from tsmarker.common import MarkerMap
 from .encode import presets
 from .common import ExtractProgramList
 
 logger = logging.getLogger('tstriage.pipeline')
-
-def CopyPart(src, pipe, start, end,  pbar=None, bufsize=1024*1024):
-    try:
-        with open(src, 'rb') as f1:
-            f1.seek(start)
-            length = end - start
-            while length:
-                chunk = min(bufsize, length)
-                data = f1.read(chunk)
-                pipe.write(data)
-                length -= chunk
-                if pbar is not None:
-                    pbar.update(chunk)
-        pipe.close()
-    except ValueError:
-        # pipe is closed by the other side
-        pass
-
-def ExtractProgram(inFile, clips, ptsMap, pipe, quiet=True):
-    totalSize = 0
-    for clip in clips:
-        start, end = ptsMap[str(clip[0])]['next_start_pos'], ptsMap[str(clip[1])]['prev_end_pos']
-        totalSize += end - start
-    with tqdm(total=totalSize, unit='B', unit_scale=True, unit_divisor=1024, disable=quiet) as pbar:
-        for clip in clips:
-            start, end = ptsMap[str(clip[0])]['next_start_pos'], ptsMap[str(clip[1])]['prev_end_pos']
-            CopyPart(inFile, pipe, start, end, pbar=pbar)
-
 
 def StripTsCmd(inFile, outFile, audioLanguages=['jpn'], fixAudio=False, noMap=False):
     args = [
@@ -130,7 +102,7 @@ class Tee(object):
         for pipe in self.outPipes:
             pipe.close()
 
-def EncodePipeline(inFile, ptsMap, markerMap, byGroup, preset, encoder):
+def EncodePipeline(inFile, ptsMap: PtsMap, markerMap: MarkerMap, byGroup, preset, encoder):
     programClipsList = ExtractProgramList(markerMap, byGroup)
     for i in range(len(programClipsList)):
         with open('encode.log', 'w') as encodeLogs, open('strip.log', 'w') as stripLogs:
@@ -153,7 +125,7 @@ def EncodePipeline(inFile, ptsMap, markerMap, byGroup, preset, encoder):
                     # extract (data pump)
                     teeFile = Tee(outPipes=[stripTsP.stdin, subtitlesP.stdin])
                     clips = programClipsList[i]
-                    ExtractProgram(inFile, clips, ptsMap, teeFile, quiet=False)
+                    ptsMap.ExtractProgramPipe(inFile, clips, teeFile, quiet=False)
 
 def ReadFFmpegInfo(lines):
     soundTracks = 0
@@ -222,13 +194,13 @@ def HandleFFmpegLog(lines, pbar=None, callback=None):
         HandleFFmpegProgress(lines, pbar, callback)
     return info
 
-def ExtractLogoPipeline(inFile, ptsMap, outDir, quiet=False):
-    clips = GetClips(ptsMap)
+def ExtractLogoPipeline(inFile: Path, ptsMap: PtsMap, outDir: Path, quiet: bool=False):
+    clips = ptsMap.Clips()
     for clip in tqdm(clips, unit='clip', disable=quiet):
         logoPath = outDir / Path(ClipToFilename(clip)).with_suffix('.png')
         with tempfile.TemporaryDirectory(prefix='LogoPipeline_') as tmpFolder:
             with subprocess.Popen(ExtractAreaCmd('-', tmpFolder), stdin=subprocess.PIPE, stderr=subprocess.PIPE) as extractAreaP:
-                thread = Thread(target=ExtractProgram, args=(inFile, [ clip ], ptsMap, extractAreaP.stdin, True))
+                thread = Thread(target=PtsMap.ExtractProgramPipe, args=(ptsMap, inFile, [ clip ], extractAreaP.stdin, True))
                 thread.start()
 
                 class LogoGenerator:
@@ -255,11 +227,11 @@ def ExtractLogoPipeline(inFile, ptsMap, outDir, quiet=False):
 
     # calculate the logo of the entire video
     videoLogo = None
-    selectedClips, selectedLen = SelectClips(clips)
+    selectedClips, selectedLen = ptsMap.SelectClips()
     if selectedLen == 0:
-        selectedClips, selectedLen = SelectClips(clips, lengthLimit=15)
+        selectedClips, selectedLen = ptsMap.SelectClips(lengthLimit=15)
     if selectedLen == 0:
-        selectedClips, selectedLen = SelectClips(clips, lengthLimit=0)
+        selectedClips, selectedLen = ptsMap.SelectClips(lengthLimit=0)
     for clip in selectedClips:
         clipLen = clip[1] - clip[0]
         logoPath = outDir / Path(ClipToFilename(clip)).with_suffix('.png')
@@ -316,15 +288,13 @@ if __name__ == "__main__":
         inFile = Path(args.input)
         indexPath = inFile.parent / '_metadata' / (inFile.stem + '.ptsmap')
         markerPath = inFile.parent / '_metadata' / (inFile.stem + '.markermap')
-        with indexPath.open() as fpIndex, markerPath.open() as fpMarker:
-            ptsMap, markerMap = json.load(fpIndex), json.load(fpMarker)
-        EncodePipeline(inFile, ptsMap, markerMap, byGroup=args.bygroup, preset=args.preset, encoder=args.encoder)
+        ptsMap = PtsMap(indexPath)
+        markerMap = MarkerMap(markerPath, ptsMap)
+        EncodePipeline(inFile, ptsMap=ptsMap, markerMap=markerMap, byGroup=args.bygroup, preset=args.preset, encoder=args.encoder)
     elif args.command == 'logo':
         inFile, outDir = Path(args.input), Path(args.input).parent / '_metadata'
         indexPath = inFile.parent / '_metadata' / (inFile.stem + '.ptsmap')
-        with indexPath.open() as fp:
-            ptsMap = json.load(fp)
-        ExtractLogoPipeline(inFile, ptsMap, outDir)
+        ExtractLogoPipeline(inFile, PtsMap(indexPath), outDir)
     elif args.command == 'cropdetect':
         cropInfo = CropDetectPipeline(Path(args.input))
         print(cropInfo)

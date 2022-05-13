@@ -1,7 +1,6 @@
-from os import unlink
-import shutil
+import os, shutil, logging
 from pathlib import Path
-import logging
+from ast import literal_eval
 from tqdm import tqdm
 from tscutter.common import CopyPart, PtsMap
 from tsmarker.common import MarkerMap
@@ -57,20 +56,17 @@ def CopyWithProgress(srcPath, dstPath, force=False, epgStation=None):
                     remaining -= len(buf)
     shutil.copystat(srcPath, dstPath)
 
-def ExtractProgramList(markerMap, byGroup):
+def ExtractProgramList(markerMap: MarkerMap, byGroup: str):
     # split by _groundtruth or _ensemble
-    if '_groundtruth' in list(markerMap.values())[0]:
-        clips = [ eval(k) for k, v in markerMap.items() if v['_groundtruth'] == 1.0 ]
+    if '_groundtruth' in markerMap.Properties():
+        clips = [ literal_eval(k) for k, v in markerMap.data.items() if v['_groundtruth'] == 1.0 ]
         logger.info('Encoding by _groundtruth ...')
-    elif '_ensemble' in list(markerMap.values())[0]:
-        clips = [ eval(k) for k, v in markerMap.items() if v['_ensemble'] == 1.0 ]
+    elif '_ensemble' in markerMap.Properties():
+        clips = [ literal_eval(k) for k, v in markerMap.data.items() if v['_ensemble'] == 1.0 ]
         logger.info('Encoding by _ensemble ...')
-    elif 'subtitles' in list(markerMap.values())[0] and list(markerMap.values())[0]['subtitles'] != 0.5:
-        clips = [ eval(k) for k, v in markerMap.items() if v['subtitles'] == 1.0 ]
-        logger.info('Encoding by subtitles ...')
     else:
-        clips = [ eval(k) for k, v in markerMap.items() if v['logo'] > 0.5 ]
-        logger.info('Encoding by logo ...')
+        clips = [ literal_eval(k) for k, v in markerMap.data.items() if v['subtitles'] == 1.0 ]
+        logger.info('Encoding by subtitles ...')
     # merge neighbor clips
     mergedClips = []
     for clip in clips:
@@ -93,7 +89,7 @@ def ExtractProgram(videoPath, clips, ptsMap, outputPath, quiet=True):
         start, end = ptsMap[str(clip[0])]['next_start_pos'], ptsMap[str(clip[1])]['prev_end_pos']
         totalSize += end - start
     if Path(outputPath).exists():
-        unlink(outputPath)
+        os.unlink(outputPath)
     with tqdm(total=totalSize, unit='B', unit_scale=True, unit_divisor=1024, disable=quiet) as pbar:
         for clip in clips:
             start, end = ptsMap[str(clip[0])]['next_start_pos'], ptsMap[str(clip[1])]['prev_end_pos']
@@ -105,8 +101,7 @@ def GetClipsDuration(clips):
         duration += clip[1] - clip[0]
     return duration
 
-def ExtractPrograms(videoPath, indexPath, markerPath, byGroup, splitNum):
-    ptsMap, markerMap = PtsMap(indexPath).data, MarkerMap(markerPath, None).data
+def ExtractPrograms(videoPath: Path, ptsMap: PtsMap, markerMap: MarkerMap, byGroup: str, splitNum: int):
     programClipsList = ExtractProgramList(markerMap, byGroup)
     programTsList = []
     if byGroup:
@@ -114,7 +109,7 @@ def ExtractPrograms(videoPath, indexPath, markerPath, byGroup, splitNum):
             clips = programClipsList[i]
             outputPath = videoPath.with_stem(f'{videoPath.stem}_prog_{i+1}')
             logger.info(f'Extracting "{outputPath.name}" ...')
-            ExtractProgram(videoPath, clips, ptsMap, outputPath, quiet=False)
+            ExtractProgram(videoPath, clips, ptsMap.data, outputPath, quiet=False)
             programTsList.append(outputPath)
     elif splitNum > 1:
         programsDuration = GetClipsDuration(programClipsList[0])
@@ -126,12 +121,12 @@ def ExtractPrograms(videoPath, indexPath, markerPath, byGroup, splitNum):
                     break
             outputPath = videoPath.with_stem(f'{videoPath.stem}_prog_{i+1}')
             logger.info(f'Extracting "{outputPath.name}" ...')
-            ExtractProgram(videoPath, clips, ptsMap, outputPath, quiet=False)
+            ExtractProgram(videoPath, clips, ptsMap.data, outputPath, quiet=False)
             programTsList.append(outputPath)
     else:
         clips = programClipsList[0]
         outputPath = videoPath.with_stem(f'{videoPath.stem}_prog')
         logger.info(f'Extracting "{outputPath.name}" ...')
-        ExtractProgram(videoPath, clips, ptsMap, outputPath, quiet=False)
+        ExtractProgram(videoPath, clips, ptsMap.data, outputPath, quiet=False)
         programTsList.append(outputPath)
     return programTsList
