@@ -6,63 +6,76 @@ from tscutter.common import TsFileNotFound, InvalidTsFormat, CheckExtenralComman
 
 logger = logging.getLogger('tstriage.epg')
 
-def Dump(videoPath, quiet=False):
-    if os.name == 'nt':
-        CheckExtenralCommand('mirakurun-epgdump.cmd')
-    else:
-        CheckExtenralCommand('mirakurun-epgdump')
-    with (Path(__file__).parent / 'channels.yml').open(encoding='utf-8') as f:        
-        channels = yaml.load(f, Loader=yaml.FullLoader)
-    videoPath = Path(videoPath)
-    if not videoPath.is_file():
-        raise TsFileNotFound(f'"{videoPath.name}" not found!')
-    videoPath = Path(videoPath)
-    epgPath = videoPath.with_suffix('.epg')
-    txtPath = videoPath.with_suffix('.txt')
-    if not epgPath.exists():
+class EPG:
+    def Dump(videoPath):
+        if os.name == 'nt':
+            CheckExtenralCommand('mirakurun-epgdump.cmd')
+        else:
+            CheckExtenralCommand('mirakurun-epgdump')
+        videoPath = Path(videoPath)
+        if not videoPath.is_file():
+            raise TsFileNotFound(f'"{videoPath.name}" not found!')
+        videoPath = Path(videoPath)
+        epgPath = videoPath.with_suffix('.epg')
         if os.name == 'nt':
             pipeObj = subprocess.Popen(f'mirakurun-epgdump.cmd "{videoPath}" "{epgPath}"')
         else:
             pipeObj = subprocess.Popen(['mirakurun-epgdump', videoPath, epgPath])
         pipeObj.wait()
-    else:
-        logger.warning(f'skipping {str(videoPath)} ...')
-    info = {}
-    with epgPath.open(encoding='utf-8') as f:
-        epg = json.load(f)
-        for item in epg:
+        
+    def __init__(self, path: Path) -> None:
+        self.path = path
+        with self.path.open(encoding='utf-8') as f:
+            self.epg = json.load(f)
+    
+    def Info(self) -> dict:
+        if hasattr(self, 'info'):
+            return self.info
+        info = {}
+        for item in self.epg:
             name = item.get('name')
             if name:
                 name = unicodedata.normalize('NFKC', name)
                 #name = name.replace(chr(8217), "'")
-                videoName = unicodedata.normalize('NFKC', videoPath.stem)
+                videoName = unicodedata.normalize('NFKC', self.path.stem)
                 if name in videoName or re.sub(r"\[.*?\]", "", name) in videoName:
                     for k in item:
                         info[k] = item[k]
-    if info == {}:
-        raise InvalidTsFormat(f'"{videoPath.name}" is invalid!')
-    with txtPath.open('w', encoding='utf8') as f:
-        print(info['name'], file=f)
-        print('', file=f)
-        print(info['description'], file=f)
-        print('', file=f)
-        if 'extended' in info:
-            for k in info['extended']:
-                print(k, file=f)
-                print(info['extended'][k], file=f)
-        print('', file=f)
+        if info == {}:
+            raise InvalidTsFormat(f'"{self.path.name}" is invalid!')
+        self.info = info
+        return self.info
+
+    def ServiceId(self) -> str:
+        return self.Info()['serviceId']
+    
+    def Channel(self) -> str:
+        with (Path(__file__).parent / 'channels.yml').open(encoding='utf-8') as f:        
+            channels = yaml.load(f, Loader=yaml.FullLoader)
         for item in channels:
-            if item.get('serviceId') == info['serviceId']:
-                print(f'{item["name"]}', file=f)
-                break
-        print(f'serviceId: {info["serviceId"]}', file=f)
-        print(f"{time.strftime('%Y-%m-%d %H:%M (%a)', time.localtime(info['startAt'] / 1000))} ~ {round(info['duration'] / 1000 / 60)} mins", file=f)
-    return epgPath, txtPath
+            if item.get('serviceId') == self.ServiceId():
+                return item['name']
+
+    def OutputDesc(self, txtPath: Path) -> None:
+        with (Path(__file__).parent / 'channels.yml').open(encoding='utf-8') as f:        
+            channels = yaml.load(f, Loader=yaml.FullLoader)
+        with txtPath.open('w', encoding='utf8') as f:
+            print(self.Info()['name'], file=f)
+            print('', file=f)
+            print(self.Info()['description'], file=f)
+            print('', file=f)
+            if 'extended' in self.Info():
+                for k in self.Info()['extended']:
+                    print(k, file=f)
+                    print(self.Info()['extended'][k], file=f)
+            print('', file=f)
+            print(f'Channel: {self.Channel()}', file=f)
+            print(f'serviceId: {self.ServiceId()}', file=f)
+            print(f"{time.strftime('%Y-%m-%d %H:%M (%a)', time.localtime(self.Info()['startAt'] / 1000))} ~ {round(self.Info()['duration'] / 1000 / 60)} mins", file=f)
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Dump EPG from TS files')
-    parser.add_argument('--quiet', '-q', action='store_true', help="don't output to the console")
     parser.add_argument('--input', '-i', required=True, help='input mpegts path')
     args = parser.parse_args()
 
-    Dump(args.input, args.quiet)
+    EPG.Dump(args.input)

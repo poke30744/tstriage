@@ -3,10 +3,9 @@ import shutil, logging, os
 from tscutter.common import EncodingError, PtsMap
 from tscutter.analyze import AnalyzeVideo
 import tsmarker.common
-from tsmarker.marker import MarkVideo
-from tsmarker import subtitles, ensemble, groundtruth
+from tsmarker import subtitles, logo, clipinfo, ensemble, groundtruth
 from .common import CopyWithProgress, ExtractPrograms
-from .epg import Dump
+from .epg import EPG
 from .encode import InputFile
 
 logger = logging.getLogger('tstriage.tasks')
@@ -26,6 +25,21 @@ def Analyze(item, epgStation):
     silenceThresh =  item.get('cutter', {}).get('silenceThresh', -80)
     AnalyzeVideo(inputFile=InputFile(workingPath), indexPath=indexPath, silenceThresh=silenceThresh, minSilenceLen=minSilenceLen)
 
+    logger.info('Extracting EPG ...')
+    EPG.Dump(workingPath)
+    epgPath = workingPath.with_suffix('.epg')
+    txtPath = workingPath.with_suffix('.txt')
+    CopyWithProgress(epgPath, destination / '_metadata' / epgPath.name)
+    epg = EPG(epgPath)
+    epg.OutputDesc(destination / txtPath.name)
+    epgPath.unlink()
+
+    logger.info('Extracting subtitles ...')
+    for sub in subtitles.Extract(workingPath):
+        if sub.suffix == '.ass':
+             CopyWithProgress(sub, destination / '_metadata' / sub.name)
+        sub.unlink()
+
 def Mark(item, epgStation):
     path = Path(item['path'])
     cache = Path(item['cache']).expanduser()
@@ -38,7 +52,9 @@ def Mark(item, epgStation):
     logger.info('Marking ...')
     indexPath = destination / '_metadata' / workingPath.with_suffix('.ptsmap').name
     markerPath = destination / '_metadata' /  workingPath.with_suffix('.markermap').name
-    MarkVideo(videoPath=workingPath, indexPath=indexPath, markerPath=markerPath, methods=['subtitles', 'clipinfo', 'logo'])
+    subtitles.MarkerMap(markerPath, PtsMap(indexPath)).MarkAll(videoPath=workingPath, assPath=destination / '_metadata' / path.with_suffix('.ass').name)
+    clipinfo.MarkerMap(markerPath, PtsMap(indexPath)).MarkAll(videoPath=workingPath, quiet=False)
+    logo.MarkerMap(markerPath, PtsMap(indexPath)).MarkAll(videoPath=workingPath, quiet=False)
 
     noEnsemble = item['marker'].get('noEnsemble', False)
     outputFolder = Path(item['destination'])
@@ -117,9 +133,6 @@ def Encode(item, encoder, epgStation):
     workingPath = cache / path.name
     CopyWithProgress(path, workingPath, epgStation=epgStation)
 
-    logger.info('Extracting EPG ...')
-    epgPath, txtPath = Dump(workingPath)
-
     logger.info('Extracting program from TS ...')
     indexPath = destination / '_metadata' / (workingPath.stem + '.ptsmap')
     markerPath = destination / '_metadata' / (workingPath.stem + '.markermap')
@@ -160,8 +173,6 @@ def Encode(item, encoder, epgStation):
         if subtitlesPathList:
             for path in subtitlesPathList:
                 CopyWithProgress(path, destination / Path('Subtitles') / Path(path.name), force=True, epgStation=epgStation)
-    CopyWithProgress(epgPath, destination / 'EPG' / Path(epgPath.name), force=True, epgStation=epgStation)
-    CopyWithProgress(txtPath, destination / Path(txtPath.name), force=True, epgStation=epgStation)
     return encodedFile
 
 def Cleanup(item):

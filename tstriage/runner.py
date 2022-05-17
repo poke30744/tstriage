@@ -2,40 +2,18 @@
 import argparse, json, time, os
 from pathlib import Path
 import logging
-import unicodedata
 from .common import WindowsInhibitor
 from .epgstation import EPGStation
 from .tasks import Analyze, Mark, Cut, Encode, Confirm, Cleanup
+from .nas import NAS
 
 logger = logging.getLogger('tstriage.runner')
 
-def FindTsTriageSettings(folder, top):
-    folder = Path(folder)
-    settingsPath = folder / 'tstriage.json'
-    if settingsPath.exists():
-        return settingsPath
-    elif folder == top:
-        defaultSettings = {
-            "marker": {
-                "noEnsemble": True,
-            },
-            "encoder": {
-                "preset": "drama",
-            },
-        }
-        with settingsPath.open('w') as f:
-            json.dump(defaultSettings, f, indent=True)
-        return settingsPath
-    else:
-        return FindTsTriageSettings(folder.parent, top)
 class Runner:
     def __init__(self, configuration):
         self.configuration = configuration
-        self.uncategoried = Path(self.configuration['Uncategoried'])
-        self.destination = Path(configuration['Destination'])
         self.cache = Path(configuration['Cache']).expanduser()
         self.cache.mkdir(parents=True, exist_ok=True)
-        self.epgStation = EPGStation(url=configuration['EPGStation'], cache=configuration['Cache']) if 'EPGStation' in configuration else None
         if 'Path' in configuration:
             for key in configuration['Path']:
                 pathToAdd = configuration["Path"][key]
@@ -44,80 +22,30 @@ class Runner:
             self.encoder = configuration['Encoder']
         else:
             self.encoder = 'h264'
-    
-    def RefreshNAS(self):
-        if self.epgStation is not None:
-            self.epgStation.BusyWait()
-        categoryFolders = []
-        encodedFiles = []
-        for path in Path(self.destination).glob('**/*'):
-            if path.is_dir() and not path.name in ('_metadata', 'EPG', 'Subtitles'):
-                categoryFolders.append(path)
-            elif path.suffix == '.mp4':
-                encodedFiles.append(path.name)
-        # sort by length (long to short)
-        categoryFolders.sort(key=lambda item: (-len(str(item)), item))
-        with (self.uncategoried / 'categoryFolders.json').open('w') as f:
-            json.dump([str(i) for i in categoryFolders], f, ensure_ascii=False, indent=True)
-        with (self.uncategoried / 'encodedFiles.json').open('w') as f:
-            json.dump([str(i) for i in encodedFiles], f, ensure_ascii=False, indent=True)
+        self.epgStation = EPGStation(url=configuration['EPGStation'], cache=configuration['Cache']) if 'EPGStation' in configuration else None
+        self.nas = NAS(
+            recorded=Path(self.configuration['Uncategoried']),
+            destination=Path(configuration['Destination']),
+            epgStation=self.epgStation)
 
     def Categorize(self):
-        if not (self.uncategoried / 'categoryFolders.json').exists() or not (self.uncategoried / 'encodedFiles.json').exists():
-            self.RefreshNAS()
-        with (self.uncategoried / 'categoryFolders.json').open() as f:
-            categoryFolders = [ Path(i) for i in json.load(f) ]
-        with (self.uncategoried / 'encodedFiles.json').open() as f:
-            encodedFiles = json.load(f)
-        itemsToProcess = []
-        for path in [ path for path in Path(self.uncategoried).glob('*') if path.suffix in ('.ts', '.m2ts') ]:
-            # check if this file has been encoded
-            hadBeenEncoded = False
-            for encodedFile in encodedFiles:
-                if path.stem in encodedFile:
-                    hadBeenEncoded = True
-                    break
-            if hadBeenEncoded:
+        for path in self.nas.RecordedFiles():
+            if self.nas.HadBeenEncoded(path) or self.nas.HasActionItem(path):
                 continue
-            # find proper destinations
-            encodeTo = None
-            for folder in categoryFolders:
-                category = folder.name
-                if unicodedata.normalize('NFKC', category) in unicodedata.normalize('NFKC', path.stem):
-                    encodeTo = folder
-                    break
-            if encodeTo is not None:
-                itemsToProcess.append({
-                    'path': str(path),
-                    'destination': str(encodeTo),
-                })
-            else:
-                itemsToProcess.append({
-                    'path': str(path),
-                    'destination': None,
-                })
-        for item in itemsToProcess:
-            actionItemExists = False
-            for path in self.uncategoried.glob('*.*'):
-                if path.stem == Path(item['path']).stem and not path.suffix in ['.ts', '.m2ts']:
-                    actionItemExists = True
-                    break
-            if not actionItemExists:
-                jsonPath = self.uncategoried / f"{Path(item['path']).stem}.categorized"
-                with jsonPath.open('w') as f:
-                    json.dump(item, f, ensure_ascii=False, indent=True)
+            item = {
+                'path': str(path),
+                'destination': str(self.nas.FindCategoryFolder(path)),
+            }
+            self.nas.CreateActionItem(item, '.categorized')
     
     def List(self):
-        for path in self.uncategoried.glob('*.categorized'):
-            with path.open(encoding='utf-8') as f:
-                item = json.load(f)
+        for path in self.nas.ActionItems('.categorized'):
+            item = self.nas.LoadActionItem(path)
             encodeTo = item["destination"]
             if encodeTo is not None:
-                settingsPath = FindTsTriageSettings(encodeTo, self.destination)
-                with settingsPath.open() as f:
+                with self.nas.FindTsTriageSettings(folder=Path(encodeTo)).open() as f:
                     settings = json.load(f)
-                newJsonPath = path.with_suffix('.toanalyze')
-                path.rename(newJsonPath)
+                path.unlink()
                 newItem = {
                     'path': item['path'],
                     'destination': item['destination'],
@@ -126,19 +54,18 @@ class Runner:
                     'marker': settings.get('marker', {}),
                     'encoder': settings.get('encoder', {})
                 }
+                self.nas.CreateActionItem(newItem, '.toanalyze')
                 logger.info(f'Will process: {item["path"]}')
-                with newJsonPath.open('w') as f:
-                    json.dump(newItem, f, ensure_ascii=False, indent=True)
             else:
                 logger.warn(f'More information is needed: {item["path"]}')
 
     def Analyze(self):
-        for path in self.uncategoried.glob('*.toanalyze'):
-            with path.open(encoding='utf-8') as f:
-                item = json.load(f)
+        for path in self.nas.ActionItems('.toanalyze'):
+            item = self.nas.LoadActionItem(path)
             try:
                 Analyze(item=item, epgStation=self.epgStation)
-                path.rename(path.with_suffix('.tomark'))
+                path.unlink()
+                self.nas.CreateActionItem(item, '.tomark')
             except KeyboardInterrupt:
                 raise
             except:
@@ -146,12 +73,12 @@ class Runner:
                 path.rename(path.with_suffix('.error'))
 
     def Mark(self):
-        for path in self.uncategoried.glob('*.tomark'):
-            with path.open(encoding='utf-8') as f:
-                item = json.load(f)
+        for path in self.nas.ActionItems('.tomark'):
+            item = self.nas.LoadActionItem(path)
             try:
                 Mark(item=item, epgStation=self.epgStation)
-                path.rename(path.with_suffix('.tocut'))
+                path.unlink()
+                self.nas.CreateActionItem(item, '.tocut')
             except KeyboardInterrupt:
                 raise
             except:
@@ -159,12 +86,12 @@ class Runner:
                 path.rename(path.with_suffix('.error'))
 
     def Cut(self):
-        for path in self.uncategoried.glob('*.tocut'):
-            with path.open(encoding='utf-8') as f:
-                item = json.load(f)
+        for path in self.nas.ActionItems('.tocut'):
+            item = self.nas.LoadActionItem(path)
             try:
                 Cut(item=item, epgStation=self.epgStation)
-                path.rename(path.with_suffix('.toencode'))
+                path.unlink()
+                self.nas.CreateActionItem(item, '.toencode')
             except KeyboardInterrupt:
                 raise
             except:
@@ -172,26 +99,13 @@ class Runner:
                 path.rename(path.with_suffix('.error'))
 
     def Encode(self):
-        for path in self.uncategoried.glob('*.toencode'):
-            with path.open(encoding='utf-8') as f:
-                item = json.load(f)
+        for path in self.nas.ActionItems('.toencode'):
+            item = self.nas.LoadActionItem(path)
             try:
                 encodedFile = Encode(item=item, encoder=self.encoder, epgStation=self.epgStation)
-                path.rename(path.with_suffix('.toconfirm'))
-                # add encoded items
-                with (self.uncategoried / 'categoryFolders.json').open() as f:
-                    categoryFolders = json.load(f)
-                with (self.uncategoried / 'encodedFiles.json').open() as f:
-                    encodedFiles = json.load(f)
-                if not item['destination'] in categoryFolders:
-                    categoryFolders.append(item['destination'])
-                    categoryFolders.sort(key=lambda item: (-len(str(item)), item))
-                if not encodedFile in encodedFiles:
-                    encodedFiles.append(encodedFile.name)
-                with (self.uncategoried / 'categoryFolders.json').open('w') as f:
-                    json.dump([str(i) for i in categoryFolders], f, ensure_ascii=False, indent=True)
-                with (self.uncategoried / 'encodedFiles.json').open('w') as f:
-                    json.dump([str(i) for i in encodedFiles], f, ensure_ascii=False, indent=True)
+                path.unlink()
+                self.nas.CreateActionItem(item, '.toconfirm')
+                self.nas.AddEncodedFile(encodedFile)
             except KeyboardInterrupt:
                 raise
             except:
@@ -199,44 +113,38 @@ class Runner:
                 path.rename(path.with_suffix('.error'))
 
     def Confirm(self):
-        filesToConfirm = []
-        for pattern in ('*.toencode', '*.toconfirm', '*.tocleanup'):
-            filesToConfirm += list(self.uncategoried.glob(pattern))
-        for path in filesToConfirm:
-            with path.open(encoding='utf-8') as f:
-                item = json.load(f)
+        for path in self.nas.ActionItems('.toencode') + self.nas.ActionItems('.toconfirm') + self.nas.ActionItems('.tocleanup'):
+            item = self.nas.LoadActionItem(path)
             reEncodingNeeded = Confirm(item=item)
+            path.unlink()
             if reEncodingNeeded or path.suffix == '.toencode':
-                path.rename(path.with_suffix('.toencode'))
+                self.nas.CreateActionItem(item, '.toencode')
             else:
-                path.rename(path.with_suffix('.tocleanup'))
+                self.nas.CreateActionItem(item, '.tocleanup')
 
     def Cleanup(self):
-        for path in self.uncategoried.glob('*.tocleanup'):
-            with path.open(encoding='utf-8') as f:
-                item = json.load(f)
+        for path in self.nas.ActionItems('.tocleanup'):
+            item = self.nas.LoadActionItem(path)
             Cleanup(item=item)
             path.unlink()
     
     def Run(self, tasks):
         logger.info(f'running {tasks} ...')
         for task in tasks:
-            if task == 'refresh':
-                self.RefreshNAS()
-            elif task == 'categorize':
+            if task == 'categorize':
                 self.Categorize()
             elif task == 'list':
                 self.List()
             elif task == 'analyze':
-                with WindowsInhibitor() as wi:
+                with WindowsInhibitor():
                     self.Analyze()
             elif task == 'mark':
-                with WindowsInhibitor() as wi:
+                with WindowsInhibitor():
                     self.Mark()
             elif task == 'cut':
                     self.Cut()
             elif task == 'encode':
-                with WindowsInhibitor() as wi:
+                with WindowsInhibitor():
                     self.Encode()
             elif task == 'confirm':
                 self.Confirm()
@@ -246,7 +154,7 @@ class Runner:
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Python script to triage TS files')
     parser.add_argument('--config', '-c', required=True, help='configuration file path')
-    parser.add_argument('--task', '-t', required=True, nargs='+', choices=['refresh', 'categorize', 'list', 'analyze', 'mark', 'cut', 'confirm', 'encode', 'cleanup'], help='tasks to run')
+    parser.add_argument('--task', '-t', required=True, nargs='+', choices=['categorize', 'list', 'analyze', 'mark', 'cut', 'confirm', 'encode', 'cleanup'], help='tasks to run')
     parser.add_argument('--daemon', '-d', type=int, help='keep running')
 
     args = parser.parse_args()
