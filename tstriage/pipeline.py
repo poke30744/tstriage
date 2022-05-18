@@ -1,10 +1,11 @@
-import logging, subprocess, argparse, os, tempfile, re, io, json
+import logging, subprocess, argparse, os, tempfile, re, io
 from pathlib import Path
 from threading import Thread
 from tqdm import tqdm
 import numpy as np
 from PIL import Image
-from tscutter.common import ClipToFilename, PtsMap
+from tscutter import common
+from tscutter.common import ClipToFilename
 from tsmarker.logo import drawEdges, cv2imread, cv2imwrite
 from tsmarker.common import MarkerMap
 from .encode import presets
@@ -87,6 +88,7 @@ def ExtractAreaCmd(inFile, folder, crop=None, ss=None, to=None, fps='1/1'):
     args += [ f'{folder}/out%8d.bmp' ]
     return args
 
+
 class Tee(object):
     def __init__(self, outPipes, pbar=None):
         self.outPipes = outPipes
@@ -102,12 +104,42 @@ class Tee(object):
         for pipe in self.outPipes:
             pipe.close()
 
+class PtsMap(common.PtsMap):
+    def ExtractMeanImagePipe(self, inFile: Path, clip: tuple[float], logoPath: Path, quiet: bool=False):
+        with tempfile.TemporaryDirectory(prefix='LogoPipeline_') as tmpFolder:
+            with subprocess.Popen(ExtractAreaCmd('-', tmpFolder), stdin=subprocess.PIPE, stderr=subprocess.PIPE) as extractAreaP:
+                thread = Thread(target=PtsMap.ExtractClipPipe, args=(self, inFile, clip, extractAreaP.stdin, quiet))
+                thread.start()
+
+                class LogoGenerator:
+                    def __init__(self):
+                        self.picSum = None
+                        self.count = 0
+                    def Callback(self):
+                        for path in Path(tmpFolder).glob('*.bmp'):
+                            image = np.array(Image.open(path)).astype(np.float32)
+                            self.picSum = image if self.picSum is None else (self.picSum + image)
+                            self.count += 1
+                            os.unlink(path)
+                    def Save(self, path):
+                        Image.fromarray((self.picSum/self.count).astype(np.uint8)).save(str(path))
+                        
+                logoGenerator = LogoGenerator()
+                info = HandleFFmpegLog(lines=io.TextIOWrapper(extractAreaP.stderr, errors='ignore'), callback=logoGenerator.Callback)                 
+                if logoGenerator.count > 0:
+                    logoGenerator.Save(logoPath)
+                else:
+                    Image.new("RGB", (info['width'], info['height']), (0, 0, 0)).save(str(logoPath))
+
+                thread.join()
+
 def EncodePipeline(inFile, ptsMap: PtsMap, markerMap: MarkerMap, byGroup, preset, encoder):
     programClipsList = ExtractProgramList(markerMap, byGroup)
     for i in range(len(programClipsList)):
         with open('encode.log', 'w') as encodeLogs, open('strip.log', 'w') as stripLogs:
             # encode
             outFile = inFile.with_stem(f'{inFile.stem}_{i}').with_suffix('.mp4')
+            logger.info(f'Encoding {outFile.name} ...')
             encodeTsP = subprocess.Popen(EncodeTsCmd('-', outFile, preset, encoder), stdin=subprocess.PIPE, stderr=encodeLogs)
             with encodeTsP :
                 # strip
@@ -125,7 +157,7 @@ def EncodePipeline(inFile, ptsMap: PtsMap, markerMap: MarkerMap, byGroup, preset
                     # extract (data pump)
                     teeFile = Tee(outPipes=[stripTsP.stdin, subtitlesP.stdin])
                     clips = programClipsList[i]
-                    ptsMap.ExtractProgramPipe(inFile, clips, teeFile, quiet=False)
+                    ptsMap.ExtractClipsPipe(inFile, clips, teeFile, quiet=False)
 
 def ReadFFmpegInfo(lines):
     soundTracks = 0
@@ -194,60 +226,30 @@ def HandleFFmpegLog(lines, pbar=None, callback=None):
         HandleFFmpegProgress(lines, pbar, callback)
     return info
 
-def ExtractLogoPipeline(inFile: Path, ptsMap: PtsMap, outDir: Path, quiet: bool=False):
-    clips = ptsMap.Clips()
-    for clip in tqdm(clips, unit='clip', disable=quiet):
-        logoPath = outDir / Path(ClipToFilename(clip)).with_suffix('.png')
-        with tempfile.TemporaryDirectory(prefix='LogoPipeline_') as tmpFolder:
-            with subprocess.Popen(ExtractAreaCmd('-', tmpFolder), stdin=subprocess.PIPE, stderr=subprocess.PIPE) as extractAreaP:
-                thread = Thread(target=PtsMap.ExtractProgramPipe, args=(ptsMap, inFile, [ clip ], extractAreaP.stdin, True))
-                thread.start()
-
-                class LogoGenerator:
-                    def __init__(self):
-                        self.picSum = None
-                        self.count = 0
-                    def Callback(self):
-                        for path in Path(tmpFolder).glob('*.bmp'):
-                            image = np.array(Image.open(path)).astype(np.float32)
-                            self.picSum = image if self.picSum is None else (self.picSum + image)
-                            self.count += 1
-                            os.unlink(path)
-                    def Save(self, path):
-                        Image.fromarray((self.picSum/self.count).astype(np.uint8)).save(str(path))
-                        
-                logoGenerator = LogoGenerator()
-                info = HandleFFmpegLog(lines=io.TextIOWrapper(extractAreaP.stderr, errors='ignore'), callback=logoGenerator.Callback)                 
-                if logoGenerator.count > 0:
-                    logoGenerator.Save(logoPath)
-                else:
-                    Image.new("RGB", (info['width'], info['height']), (0, 0, 0)).save(str(logoPath))
-
-                thread.join()
-
+def ExtractLogoPipeline(inFile: Path, ptsMap: PtsMap, outFile: Path, maxTimeToExtract=120, removeBoarder: bool=True, quiet: bool=False) -> None:
     # calculate the logo of the entire video
-    videoLogo = None
     selectedClips, selectedLen = ptsMap.SelectClips()
     if selectedLen == 0:
         selectedClips, selectedLen = ptsMap.SelectClips(lengthLimit=15)
     if selectedLen == 0:
         selectedClips, selectedLen = ptsMap.SelectClips(lengthLimit=0)
-    for clip in selectedClips:
+    with tempfile.TemporaryDirectory(prefix='ExtractLogoPipeline_') as tmpFolder:
+        videoLogo = None
+        clip = selectedClips[0]
         clipLen = clip[1] - clip[0]
-        logoPath = outDir / Path(ClipToFilename(clip)).with_suffix('.png')
+        logoPath = tmpFolder / Path(ClipToFilename(clip)).with_suffix('.png')
+        # shorten clip to less than maxTimeToExtract seconds
+        if clip[1] - clip[0] > maxTimeToExtract:
+            padding = (clip[1] - clip[0] - maxTimeToExtract) / 2
+            clip = (padding + clip[0], padding + clip[0] + maxTimeToExtract)
+        logger.info(f'Extracting logo from {inFile.name}: {clip} ...')
+        ptsMap.ExtractMeanImagePipe(inFile, clip, logoPath, quiet)
         img = cv2imread(str(logoPath)) * clipLen
         videoLogo = img if videoLogo is None else (videoLogo + img)
-    videoLogo /= selectedLen
-    logoPath = outDir / (inFile.stem + '_logo.png')
-    cv2imwrite(str(logoPath), videoLogo)
-    videoEdgePath = outDir / (inFile.stem + '_video_edge.png')
-    logoEdgePath = outDir / (inFile.stem + '_logo_edge.png')
-    drawEdges(logoPath, outputPath=videoEdgePath, removeBoarder=False)
-    drawEdges(logoPath, outputPath=logoEdgePath, removeBoarder=True)
-    for clip in clips:
-        logoPath = outDir / Path(ClipToFilename(clip)).with_suffix('.png')
-        os.unlink(logoPath)
-    return videoEdgePath, logoEdgePath
+        videoLogo /= selectedLen
+        logoPath = Path(tmpFolder) / (inFile.stem + '_logo.png')
+        cv2imwrite(str(logoPath), videoLogo)
+        drawEdges(logoPath, outputPath=outFile, removeBoarder=removeBoarder)
 
 def CropDetectPipeline(videoEdgePath, threshold=0.3):
     videoEdges = np.array(Image.open(videoEdgePath))
@@ -292,9 +294,10 @@ if __name__ == "__main__":
         markerMap = MarkerMap(markerPath, ptsMap)
         EncodePipeline(inFile, ptsMap=ptsMap, markerMap=markerMap, byGroup=args.bygroup, preset=args.preset, encoder=args.encoder)
     elif args.command == 'logo':
-        inFile, outDir = Path(args.input), Path(args.input).parent / '_metadata'
+        inFile = Path(args.input)
+        outFile = inFile.with_suffix('.logo.png')
         indexPath = inFile.parent / '_metadata' / (inFile.stem + '.ptsmap')
-        ExtractLogoPipeline(inFile, PtsMap(indexPath), outDir)
+        ExtractLogoPipeline(inFile, PtsMap(indexPath), outFile)
     elif args.command == 'cropdetect':
         cropInfo = CropDetectPipeline(Path(args.input))
         print(cropInfo)

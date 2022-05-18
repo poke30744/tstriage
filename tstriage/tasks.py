@@ -1,12 +1,14 @@
 from pathlib import Path
 import shutil, logging, os
-from tscutter.common import EncodingError, PtsMap
+from tscutter.common import EncodingError
 from tscutter.analyze import AnalyzeVideo
 import tsmarker.common
 from tsmarker import subtitles, logo, clipinfo, ensemble, groundtruth
 from .common import CopyWithProgress, ExtractPrograms
+from .pipeline import PtsMap
 from .epg import EPG
 from .encode import InputFile
+from .pipeline import ExtractLogoPipeline
 
 logger = logging.getLogger('tstriage.tasks')
 
@@ -39,6 +41,10 @@ def Analyze(item, epgStation):
         if sub.suffix == '.ass':
              CopyWithProgress(sub, destination / '_metadata' / sub.name)
         sub.unlink()
+    
+    logoPath = (path.parent / '_tstriage' / epg.Channel()).with_suffix('.png')
+    if not logoPath.exists():
+        ExtractLogoPipeline(inFile=workingPath, ptsMap=PtsMap(indexPath), outFile=logoPath)
 
 def Mark(item, epgStation):
     path = Path(item['path'])
