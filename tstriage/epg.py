@@ -3,6 +3,7 @@ from pathlib import Path
 import logging
 import yaml
 from tscutter.common import TsFileNotFound, InvalidTsFormat, CheckExtenralCommand
+from tscutter.ffmpeg import InputFile
 
 logger = logging.getLogger('tstriage.epg')
 
@@ -23,8 +24,9 @@ class EPG:
             pipeObj = subprocess.Popen(['mirakurun-epgdump', videoPath, epgPath])
         pipeObj.wait()
         
-    def __init__(self, path: Path, channels: dict=None) -> None:
+    def __init__(self, path: Path, inputFile: InputFile, channels: dict=None) -> None:
         self.path = path
+        self.inputFile = inputFile
         with self.path.open(encoding='utf-8') as f:
             self.epg = json.load(f)
         self.channels = channels
@@ -39,7 +41,7 @@ class EPG:
                 name = unicodedata.normalize('NFKC', name)
                 #name = name.replace(chr(8217), "'")
                 videoName = unicodedata.normalize('NFKC', self.path.stem)
-                if name in videoName or re.sub(r"\[.*?\]", "", name) in videoName:
+                if (name in videoName or re.sub(r"\[.*?\]", "", name) in videoName) and item.get('serviceId') == self.ServiceId():
                     for k in item:
                         info[k] = item[k]
         if info == {}:
@@ -48,7 +50,7 @@ class EPG:
         return self.info
 
     def ServiceId(self) -> str:
-        return self.Info()['serviceId']
+        return self.inputFile.GetInfo()['serviceId']
     
     def Channel(self) -> str:
         if self.channels is None:
@@ -59,8 +61,6 @@ class EPG:
                 return item['name']
 
     def OutputDesc(self, txtPath: Path) -> None:
-        with (Path(__file__).parent / 'channels.yml').open(encoding='utf-8') as f:        
-            channels = yaml.load(f, Loader=yaml.FullLoader)
         with txtPath.open('w', encoding='utf8') as f:
             print(self.Info()['name'], file=f)
             print('', file=f)

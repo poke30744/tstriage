@@ -1,13 +1,14 @@
 from pathlib import Path
-import shutil, logging, os
+import shutil, logging
 from tscutter.ffmpeg import InputFile
 from tscutter.analyze import AnalyzeVideo
 import tsmarker.common
 from tsmarker import subtitles, logo, clipinfo, ensemble, groundtruth
+from tsmarker.pipeline import PtsMap, ExtractLogoPipeline
 from .common import CopyWithProgress
 from .epg import EPG
 from .epgstation import EPGStation
-from .pipeline import ExtractLogoPipeline, EncodePipeline, PtsMap, MarkerMap
+from .pipeline import MarkerMap, EncodePipeline
 
 logger = logging.getLogger('tstriage.tasks')
 
@@ -24,14 +25,15 @@ def Analyze(item, epgStation: EPGStation):
     indexPath = destination / '_metadata' / workingPath.with_suffix('.ptsmap').name
     minSilenceLen = item.get('cutter', {}).get('minSilenceLen', 800)
     silenceThresh =  item.get('cutter', {}).get('silenceThresh', -80)
-    AnalyzeVideo(inputFile=InputFile(workingPath), indexPath=indexPath, silenceThresh=silenceThresh, minSilenceLen=minSilenceLen)
+    inputFile = InputFile(workingPath)
+    AnalyzeVideo(inputFile=inputFile, indexPath=indexPath, silenceThresh=silenceThresh, minSilenceLen=minSilenceLen)
 
     logger.info('Extracting EPG ...')
     EPG.Dump(workingPath)
     epgPath = workingPath.with_suffix('.epg')
     txtPath = workingPath.with_suffix('.txt')
     CopyWithProgress(epgPath, destination / '_metadata' / epgPath.name)
-    epg = EPG(epgPath, epgStation.GetChannels())
+    epg = EPG(epgPath, inputFile,  epgStation.GetChannels())
     epg.OutputDesc(destination / txtPath.name)
     epgPath.unlink()
 
@@ -52,6 +54,7 @@ def Mark(item, epgStation: EPGStation):
 
     logger.info('Copying TS file to working folder ...')
     workingPath = cache / path.name
+    inputFile = InputFile(workingPath)
     CopyWithProgress(path, workingPath, epgStation=epgStation)
     
     logger.info('Marking ...')
@@ -59,7 +62,9 @@ def Mark(item, epgStation: EPGStation):
     markerPath = destination / '_metadata' /  workingPath.with_suffix('.markermap').name
     subtitles.MarkerMap(markerPath, PtsMap(indexPath)).MarkAll(videoPath=workingPath, assPath=destination / '_metadata' / path.with_suffix('.ass.original').name)
     clipinfo.MarkerMap(markerPath, PtsMap(indexPath)).MarkAll(videoPath=workingPath, quiet=False)
-    logo.MarkerMap(markerPath, PtsMap(indexPath)).MarkAll(videoPath=workingPath, quiet=False)
+    epg = EPG(destination / '_metadata' / path.with_suffix('.epg').name, inputFile, epgStation.GetChannels())
+    logoPath = (path.parent / '_tstriage' / epg.Channel()).with_suffix('.png')
+    logo.MarkerMap(markerPath, PtsMap(indexPath)).MarkAll(videoPath=workingPath, logoPath=logoPath, quiet=False)
 
     noEnsemble = item['marker'].get('noEnsemble', False)
     outputFolder = Path(item['destination'])

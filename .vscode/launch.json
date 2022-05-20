@@ -18,7 +18,7 @@
             "module": "tstriage.runner",
             "args": [
                 "-c",
-                "triage.sample.json",
+                "triage.config.json",
                 "-t",
                 "categorize"
             ]
@@ -30,7 +30,7 @@
             "module": "tstriage.runner",
             "args": [
                 "-c",
-                "triage.sample.json",
+                "triage.config.json",
                 "-t",
                 "list"
             ]
@@ -43,7 +43,7 @@
             "module": "tstriage.runner",
             "args": [
                 "-c",
-                "triage.sample.json",
+                "triage.config.json",
                 "-t",
                 "analyze"
             ]
@@ -56,7 +56,7 @@
             "module": "tstriage.runner",
             "args": [
                 "-c",
-                "triage.sample.json",
+                "triage.config.json",
                 "-t",
                 "mark"
             ]
@@ -69,7 +69,7 @@
             "module": "tstriage.runner",
             "args": [
                 "-c",
-                "triage.sample.json",
+                "triage.config.json",
                 "-t",
                 "cut"
             ]
@@ -82,7 +82,7 @@
             "module": "tstriage.runner",
             "args": [
                 "-c",
-                "triage.sample.json",
+                "triage.config.json",
                 "-t",
                 "confirm"
             ]
@@ -95,7 +95,7 @@
             "module": "tstriage.runner",
             "args": [
                 "-c",
-                "triage.sample.json",
+                "triage.config.json",
                 "-t",
                 "encode"
             ]
@@ -108,7 +108,7 @@
             "module": "tstriage.runner",
             "args": [
                 "-c",
-                "triage.sample.json",
+                "triage.config.json",
                 "-t",
                 "cleanup"
             ]
@@ -136,30 +136,6 @@
                 "--preset", "anime480p",
                 "--cropdetect",
                 "--bygroup",
-            ]
-        },
-        {
-            "name": "pipeline logo",
-            "type": "python",
-            "request": "launch",
-            "justMyCode": false,
-            "module": "tstriage.pipeline",
-            "args": [
-                "logo",
-                "-i",
-                "C:\\Samples\\lupin.ts",
-            ]
-        },
-        {
-            "name": "pipeline cropdetect",
-            "type": "python",
-            "request": "launch",
-            "justMyCode": false,
-            "module": "tstriage.pipeline",
-            "args": [
-                "cropdetect",
-                "-i",
-                "C:\\Samples\\lupin.ts",
             ]
         },
         {

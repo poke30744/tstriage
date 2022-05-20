@@ -1,13 +1,7 @@
-import logging, subprocess, argparse, os, tempfile, re, io
+import logging, subprocess, argparse, os, tempfile
 from pathlib import Path
-from threading import Thread
-from tqdm import tqdm
-import numpy as np
-from PIL import Image
-from tscutter import common
-from tscutter.common import ClipToFilename
 from tscutter.ffmpeg import InputFile
-from tsmarker.logo import drawEdges, cv2imread, cv2imwrite
+from tsmarker.pipeline import PtsMap, ExtractLogoPipeline, CropDetectPipeline
 import tsmarker.common
 
 logger = logging.getLogger('tstriage.pipeline')
@@ -111,21 +105,6 @@ def EncodeTsCmd(inPath, outPath, preset, encoder, crop=None):
     args += [ outPath ]
     return args
 
-def ExtractAreaCmd(inFile, folder, crop=None, ss=None, to=None, fps='1/1'):
-    args = [ 'ffmpeg', '-hide_banner' ]
-    if ss is not None and to is not None:
-        args += [ '-ss', str(ss), '-to', str(to) ]
-    args += [ '-i', inFile ]
-    vFilters = []
-    if crop is not None:
-        vFilters += [ f'crop={crop["w"]}:{crop["h"]}:{crop["x"]}:{crop["y"]}' ]
-    if fps is not None:
-        vFilters += [ f'fps={fps}' ]
-    if vFilters:
-        args += [ '-filter:v', ','.join(vFilters) ]
-    args += [ f'{folder}/out%8d.bmp' ]
-    return args
-
 class Tee(object):
     def __init__(self, outPipes: list, couldBeBroken: list=[], pbar=None):
         self.outPipes = outPipes
@@ -149,36 +128,6 @@ class Tee(object):
     def close(self):
         for pipe in self.outPipes:
             pipe.close()
-
-class PtsMap(common.PtsMap):
-    def ExtractMeanImagePipe(self, inFile: Path, clip: tuple[float], logoPath: Path, quiet: bool=False):
-        with tempfile.TemporaryDirectory(prefix='LogoPipeline_') as tmpFolder:
-            with subprocess.Popen(ExtractAreaCmd('-', tmpFolder), stdin=subprocess.PIPE, stderr=subprocess.PIPE) as extractAreaP:
-                thread = Thread(target=PtsMap.ExtractClipPipe, args=(self, inFile, clip, extractAreaP.stdin, quiet))
-                thread.start()
-
-                class LogoGenerator:
-                    def __init__(self):
-                        self.picSum = None
-                        self.count = 0
-                    def Callback(self):
-                        for path in Path(tmpFolder).glob('*.bmp'):
-                            image = np.array(Image.open(path)).astype(np.float32)
-                            self.picSum = image if self.picSum is None else (self.picSum + image)
-                            self.count += 1
-                            os.unlink(path)
-                    def Save(self, path):
-                        Image.fromarray((self.picSum/self.count).astype(np.uint8)).save(str(path))
-                        
-                logoGenerator = LogoGenerator()
-                info = HandleFFmpegLog(lines=io.TextIOWrapper(extractAreaP.stderr, errors='ignore'), callback=logoGenerator.Callback)                 
-                if logoGenerator.count > 0:
-                    logoGenerator.Save(logoPath)
-                else:
-                    Image.new("RGB", (info['width'], info['height']), (0, 0, 0)).save(str(logoPath))
-
-                thread.join()
-
 class MarkerMap(tsmarker.common.MarkerMap):
     def GetProgramClips(self) -> list:
         if '_groundtruth' in self.Properties():
@@ -282,116 +231,6 @@ def EncodePipeline(inFile: Path, ptsMap: PtsMap, markerMap: MarkerMap, outFile: 
                     clips = programClipsList[i]
                     ptsMap.ExtractClipsPipe(inFile, clips, teeFile, quiet=False)
 
-def ReadFFmpegInfo(lines):
-    soundTracks = 0
-    duration = None
-    for line in lines:
-        if 'Duration' in line:
-            durationFields = line.split(',')[0].replace('Duration:', '').strip().split(':')
-            if durationFields[0] != 'N/A':
-                duration = float(durationFields[0]) * 3600 + float(durationFields[1]) * 60  + float(durationFields[2])
-        if 'Stream #' in line:
-            if 'Video:' in line:
-                for item in re.findall(r'\d+x\d+', line):
-                    sizeFields = item.split('x')
-                    if sizeFields[0] != '0' and sizeFields[1] != '0':
-                        width, height = int(sizeFields[0]), int(sizeFields[1])
-                        break
-                for item in line.split(','):
-                    if ' fps' in item:
-                        fps = float(item.replace(' fps', ''))
-                        break
-                sar = line.split('SAR ')[1].split(' ')[0].split(':')
-                sar = int(sar[0]), int(sar[1])
-                dar = line.split('DAR ')[1].split(' ')[0].split(']')[0].split(':')
-                dar = int(dar[0]), int(dar[1])
-                sar = sar
-                dar = dar
-            elif 'Audio:' in line and 'Hz,' in line:
-                soundTracks += 1
-        if line.startswith('Output') or 'time=' in line:
-            break
-    return {
-        'duration': duration, 
-        'width': width,
-        'height': height,
-        'fps': fps,
-        'sar': sar,
-        'dar': dar,
-        'soundTracks': soundTracks
-    }
-
-def HandleFFmpegProgress(lines, pbar=None, callback=None):
-    for line in lines:
-        if 'time=' in line:
-            for item in line.split(' '):
-                if item.startswith('time='):
-                    timeFields = item.replace('time=', '').split(':')
-                    time = float(timeFields[0]) * 3600 + float(timeFields[1]) * 60  + float(timeFields[2])
-                    if pbar is not None:
-                        pbar.update(time - pbar.n)
-                    if callback is not None:
-                        callback()
-    if pbar is not None:
-        pbar.update(pbar.total - pbar.n)
-    if callback is not None:
-        callback()
-
-def HandleFFmpegLog(lines, pbar=None, callback=None):
-    info = ReadFFmpegInfo(lines)
-    if str(pbar) == 'auto':
-        if info['duration'] is not None:
-            with tqdm(total=info['duration'], unit='SECONDs', unit_scale=True) as pbar:
-                HandleFFmpegProgress(lines, pbar, callback)
-        else:
-            HandleFFmpegProgress(lines, None, callback)
-    else:
-        HandleFFmpegProgress(lines, pbar, callback)
-    return info
-
-def ExtractLogoPipeline(inFile: Path, ptsMap: PtsMap, outFile: Path, maxTimeToExtract=120, removeBoarder: bool=True, quiet: bool=False) -> None:
-    # calculate the logo of the entire video
-    selectedClips, selectedLen = ptsMap.SelectClips()
-    if selectedLen == 0:
-        selectedClips, selectedLen = ptsMap.SelectClips(lengthLimit=15)
-    if selectedLen == 0:
-        selectedClips, selectedLen = ptsMap.SelectClips(lengthLimit=0)
-    with tempfile.TemporaryDirectory(prefix='ExtractLogoPipeline_') as tmpFolder:
-        videoLogo = None
-        clip = selectedClips[0]
-        clipLen = clip[1] - clip[0]
-        logoPath = tmpFolder / Path(ClipToFilename(clip)).with_suffix('.png')
-        # shorten clip to less than maxTimeToExtract seconds
-        if clip[1] - clip[0] > maxTimeToExtract:
-            padding = (clip[1] - clip[0] - maxTimeToExtract) / 2
-            clip = (padding + clip[0], padding + clip[0] + maxTimeToExtract)
-        logger.info(f'Extracting logo from {inFile.name}: {clip} ...')
-        ptsMap.ExtractMeanImagePipe(inFile, clip, logoPath, quiet)
-        img = cv2imread(str(logoPath)) * clipLen
-        videoLogo = img if videoLogo is None else (videoLogo + img)
-        videoLogo /= selectedLen
-        logoPath = Path(tmpFolder) / (inFile.stem + '_logo.png')
-        cv2imwrite(str(logoPath), videoLogo)
-        drawEdges(logoPath, outputPath=outFile, removeBoarder=removeBoarder)
-
-def CropDetectPipeline(videoEdgePath, threshold=0.3):
-    videoEdges = np.array(Image.open(videoEdgePath))
-    xAxis = videoEdges.mean(axis=0)
-    yAxis = videoEdges.mean(axis=1)
-    try:
-        xBoarders = np.argwhere(xAxis > 255 * threshold).flatten()
-        yBoarders = np.argwhere(yAxis > 255 * threshold).flatten()
-        # detect boarder like below
-        # ........||.............|..........
-        # ......|.............|||..........
-        x1, x2 = (xBoarders[0], xBoarders[-1]) if len(xBoarders) >= 2 else (0, len(xAxis) - 1)
-        y1, y2 = (yBoarders[0], yBoarders[-1]) if len(yBoarders) >= 2 else (0, len(yAxis) - 1)
-        w = x2 - x1 + 1
-        h = y2 - y1 + 1
-        return { 'w': w, 'h': h, 'x': x1, 'y': y1 }
-    except IndexError:
-        return None
-
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Process TS files in pipeline')
     subparsers = parser.add_subparsers(required=True, title='subcommands', dest='command')
@@ -403,12 +242,6 @@ if __name__ == "__main__":
     subparser.add_argument('--cropdetect', '-c', action='store_true', help='detect and crop still area')
     subparser.add_argument('--encoder', default='nvenc_h264', help='FFmpeg encoder name')
     subparser.add_argument('--notag', action='store_true', help="don't add tag to output filename")
-
-    subparser = subparsers.add_parser('logo', help='extract logo from mpegts file')
-    subparser.add_argument('--input', '-i', required=True, help='input mpegts path')
-
-    subparser = subparsers.add_parser('cropdetect', help='detect crop parameters for mpegts file')
-    subparser.add_argument('--input', '-i', required=True, help='input mpegts path')
 
     args = parser.parse_args()
 
@@ -431,15 +264,3 @@ if __name__ == "__main__":
             preset=args.preset,
             cropdetect=args.cropdetect,
             encoder=args.encoder)
-    elif args.command == 'logo':
-        inFile = Path(args.input)
-        outFile = inFile.with_suffix('.logo.png')
-        indexPath = inFile.parent / '_metadata' / (inFile.stem + '.ptsmap')
-        ExtractLogoPipeline(inFile, PtsMap(indexPath), outFile)
-    elif args.command == 'cropdetect':
-        inFile = Path(args.input)
-        indexPath = inFile.parent / '_metadata' / (inFile.stem + '.ptsmap')
-        logoPath = inFile.parent / (inFile.stem + '_CropLogo.png')
-        ExtractLogoPipeline(inFile, PtsMap(indexPath), logoPath, maxTimeToExtract=10, removeBoarder=False)
-        cropInfo = CropDetectPipeline(logoPath)
-        print(cropInfo)
