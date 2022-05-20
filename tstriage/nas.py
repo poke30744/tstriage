@@ -24,14 +24,14 @@ class NAS:
         for path in Path(self.destination).glob('**/*'):
             if path.is_dir() and not path.name in ('_metadata', 'EPG', 'Subtitles'):
                 categoryFolders.append(path)
-            elif path.suffix == '.mp4':
+            elif path.suffix == '.mp4' and (path.parent / '_metadata').exists():
                 encodedFiles.append(path.name)
         # sort categoryFolders by length (long to short)
         categoryFolders.sort(key=lambda item: (-len(str(item)), item))
         with self.categoryFoldersPath.open('w') as f:
             json.dump([str(i) for i in categoryFolders], f, ensure_ascii=False, indent=True)
         with self.encodedFilesPath.open('w') as f:
-            json.dump([str(i) for i in encodedFiles], f, ensure_ascii=False, indent=True)
+            json.dump(sorted([str(i) for i in encodedFiles]), f, ensure_ascii=False, indent=True)
     
     def EncodedFiles(self) -> list[str]:
         self.__RefreshNAS()

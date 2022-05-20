@@ -1,9 +1,6 @@
-import os, shutil, logging
+import shutil, logging
 from pathlib import Path
-from ast import literal_eval
 from tqdm import tqdm
-from tscutter.common import CopyPart, PtsMap
-from tsmarker.common import MarkerMap
 
 logger = logging.getLogger('tstriage.common')
 
@@ -55,78 +52,3 @@ def CopyWithProgress(srcPath, dstPath, force=False, epgStation=None):
                     pbar.update(len(buf))
                     remaining -= len(buf)
     shutil.copystat(srcPath, dstPath)
-
-def ExtractProgramList(markerMap: MarkerMap, byGroup: str):
-    # split by _groundtruth or _ensemble
-    if '_groundtruth' in markerMap.Properties():
-        clips = [ literal_eval(k) for k, v in markerMap.data.items() if v['_groundtruth'] == 1.0 ]
-        logger.info('Encoding by _groundtruth ...')
-    elif '_ensemble' in markerMap.Properties():
-        clips = [ literal_eval(k) for k, v in markerMap.data.items() if v['_ensemble'] == 1.0 ]
-        logger.info('Encoding by _ensemble ...')
-    else:
-        clips = [ literal_eval(k) for k, v in markerMap.data.items() if v['subtitles'] == 1.0 ]
-        logger.info('Encoding by subtitles ...')
-    # merge neighbor clips
-    mergedClips = []
-    for clip in clips:
-        if mergedClips == []:
-            mergedClips.append(clip)
-        else:
-            previousClip = mergedClips.pop()
-            if previousClip[1] == clip[0]:
-                mergedClips.append((previousClip[0], clip[1]))
-            else:
-                mergedClips.append(previousClip)
-                mergedClips.append(clip)
-    # generate program list
-    programList = [ [clip] for clip in mergedClips ] if byGroup else [ mergedClips ]
-    return programList
-
-def ExtractProgram(videoPath, clips, ptsMap, outputPath, quiet=True):
-    totalSize = 0
-    for clip in clips:
-        start, end = ptsMap[str(clip[0])]['next_start_pos'], ptsMap[str(clip[1])]['prev_end_pos']
-        totalSize += end - start
-    if Path(outputPath).exists():
-        os.unlink(outputPath)
-    with tqdm(total=totalSize, unit='B', unit_scale=True, unit_divisor=1024, disable=quiet) as pbar:
-        for clip in clips:
-            start, end = ptsMap[str(clip[0])]['next_start_pos'], ptsMap[str(clip[1])]['prev_end_pos']
-            CopyPart(videoPath, outputPath, start, end, mode='ab', pbar=pbar)
-
-def GetClipsDuration(clips):
-    duration = 0
-    for clip in clips:
-        duration += clip[1] - clip[0]
-    return duration
-
-def ExtractPrograms(videoPath: Path, ptsMap: PtsMap, markerMap: MarkerMap, byGroup: str, splitNum: int):
-    programClipsList = ExtractProgramList(markerMap, byGroup)
-    programTsList = []
-    if byGroup:
-        for i in range(len(programClipsList)):
-            clips = programClipsList[i]
-            outputPath = videoPath.with_stem(f'{videoPath.stem}_prog_{i+1}')
-            logger.info(f'Extracting "{outputPath.name}" ...')
-            ExtractProgram(videoPath, clips, ptsMap.data, outputPath, quiet=False)
-            programTsList.append(outputPath)
-    elif splitNum > 1:
-        programsDuration = GetClipsDuration(programClipsList[0])
-        for i in range(splitNum):
-            clips = []
-            while programClipsList[0] != []:
-                clips.append(programClipsList[0].pop(0))
-                if 0.95 < GetClipsDuration(clips) / programsDuration * splitNum < 1.05:
-                    break
-            outputPath = videoPath.with_stem(f'{videoPath.stem}_prog_{i+1}')
-            logger.info(f'Extracting "{outputPath.name}" ...')
-            ExtractProgram(videoPath, clips, ptsMap.data, outputPath, quiet=False)
-            programTsList.append(outputPath)
-    else:
-        clips = programClipsList[0]
-        outputPath = videoPath.with_stem(f'{videoPath.stem}_prog')
-        logger.info(f'Extracting "{outputPath.name}" ...')
-        ExtractProgram(videoPath, clips, ptsMap.data, outputPath, quiet=False)
-        programTsList.append(outputPath)
-    return programTsList

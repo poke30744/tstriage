@@ -18,8 +18,6 @@ setuptools.setup(
     install_requires=[
         'tscutter',
         'tsmarker',
-        'watchdog',
-        'py-getch',
         'PyYAML'
     ],
     package_data={'': ['channels.yml']},

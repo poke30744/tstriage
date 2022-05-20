@@ -23,10 +23,11 @@ class EPG:
             pipeObj = subprocess.Popen(['mirakurun-epgdump', videoPath, epgPath])
         pipeObj.wait()
         
-    def __init__(self, path: Path) -> None:
+    def __init__(self, path: Path, channels: dict=None) -> None:
         self.path = path
         with self.path.open(encoding='utf-8') as f:
             self.epg = json.load(f)
+        self.channels = channels
     
     def Info(self) -> dict:
         if hasattr(self, 'info'):
@@ -50,9 +51,10 @@ class EPG:
         return self.Info()['serviceId']
     
     def Channel(self) -> str:
-        with (Path(__file__).parent / 'channels.yml').open(encoding='utf-8') as f:        
-            channels = yaml.load(f, Loader=yaml.FullLoader)
-        for item in channels:
+        if self.channels is None:
+            with (Path(__file__).parent / 'channels.yml').open(encoding='utf-8') as f:        
+                self.channels = yaml.load(f, Loader=yaml.FullLoader)
+        for item in self.channels:
             if item.get('serviceId') == self.ServiceId():
                 return item['name']
 

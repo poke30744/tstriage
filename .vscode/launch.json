@@ -114,27 +114,28 @@
             ]
         },
         {
-            "name": "trigger",
-            "type": "python",
-            "request": "launch",
-            "justMyCode": false,
-            "module": "tstriage.trigger",
-            "args": [
-                "-c",
-                "triage.sample.json"
-            ]
-        },
-        {
             "name": "pipeline encode",
             "type": "python",
             "request": "launch",
             "justMyCode": false,
             "module": "tstriage.pipeline",
             "args": [
-                "encode",
-                "-i",
-                "C:\\Samples\\conan.ts",
+                "encode", "-i", "C:\\Samples\\conan.ts",
+                "--preset", "anime",
                 "--bygroup"
+            ]
+        },
+        {
+            "name": "pipeline encode (2)",
+            "type": "python",
+            "request": "launch",
+            "justMyCode": false,
+            "module": "tstriage.pipeline",
+            "args": [
+                "encode", "-i", "C:\\Samples\\lupin.ts",
+                "--preset", "anime480p",
+                "--cropdetect",
+                "--bygroup",
             ]
         },
         {
@@ -158,7 +159,7 @@
             "args": [
                 "cropdetect",
                 "-i",
-                "C:\\Samples\\_metadata\\lupin_video_edge.png",
+                "C:\\Samples\\lupin.ts",
             ]
         },
         {

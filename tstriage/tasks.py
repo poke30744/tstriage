@@ -1,18 +1,17 @@
 from pathlib import Path
 import shutil, logging, os
-from tscutter.common import EncodingError
+from tscutter.ffmpeg import InputFile
 from tscutter.analyze import AnalyzeVideo
 import tsmarker.common
 from tsmarker import subtitles, logo, clipinfo, ensemble, groundtruth
-from .common import CopyWithProgress, ExtractPrograms
-from .pipeline import PtsMap
+from .common import CopyWithProgress
 from .epg import EPG
-from .encode import InputFile
-from .pipeline import ExtractLogoPipeline
+from .epgstation import EPGStation
+from .pipeline import ExtractLogoPipeline, EncodePipeline, PtsMap, MarkerMap
 
 logger = logging.getLogger('tstriage.tasks')
 
-def Analyze(item, epgStation):
+def Analyze(item, epgStation: EPGStation):
     path = Path(item['path'])
     cache = Path(item['cache']).expanduser()
     destination = Path(item['destination'])
@@ -32,21 +31,21 @@ def Analyze(item, epgStation):
     epgPath = workingPath.with_suffix('.epg')
     txtPath = workingPath.with_suffix('.txt')
     CopyWithProgress(epgPath, destination / '_metadata' / epgPath.name)
-    epg = EPG(epgPath)
+    epg = EPG(epgPath, epgStation.GetChannels())
     epg.OutputDesc(destination / txtPath.name)
     epgPath.unlink()
 
     logger.info('Extracting subtitles ...')
     for sub in subtitles.Extract(workingPath):
         if sub.suffix == '.ass':
-             CopyWithProgress(sub, destination / '_metadata' / sub.name)
+             CopyWithProgress(sub, destination / '_metadata' / sub.with_suffix('.ass.original').name)
         sub.unlink()
     
     logoPath = (path.parent / '_tstriage' / epg.Channel()).with_suffix('.png')
     if not logoPath.exists():
         ExtractLogoPipeline(inFile=workingPath, ptsMap=PtsMap(indexPath), outFile=logoPath)
 
-def Mark(item, epgStation):
+def Mark(item, epgStation: EPGStation):
     path = Path(item['path'])
     cache = Path(item['cache']).expanduser()
     destination = Path(item['destination'])
@@ -58,7 +57,7 @@ def Mark(item, epgStation):
     logger.info('Marking ...')
     indexPath = destination / '_metadata' / workingPath.with_suffix('.ptsmap').name
     markerPath = destination / '_metadata' /  workingPath.with_suffix('.markermap').name
-    subtitles.MarkerMap(markerPath, PtsMap(indexPath)).MarkAll(videoPath=workingPath, assPath=destination / '_metadata' / path.with_suffix('.ass').name)
+    subtitles.MarkerMap(markerPath, PtsMap(indexPath)).MarkAll(videoPath=workingPath, assPath=destination / '_metadata' / path.with_suffix('.ass.original').name)
     clipinfo.MarkerMap(markerPath, PtsMap(indexPath)).MarkAll(videoPath=workingPath, quiet=False)
     logo.MarkerMap(markerPath, PtsMap(indexPath)).MarkAll(videoPath=workingPath, quiet=False)
 
@@ -67,18 +66,21 @@ def Mark(item, epgStation):
     byEnsemble = not noEnsemble
     if byEnsemble:
         # find metadata folder
-        if (outputFolder / '_metadata').exists() and len(os.listdir(outputFolder / '_metadata')) > 10:
+        if (outputFolder / '_metadata').exists() and len(list((outputFolder / '_metadata').glob('*.markermap'))) > 5:
             metadataPath = outputFolder
+            normalize = False
             logger.info(f'Using metadata in {metadataPath} ...')
         else:
             metadataPath = outputFolder.parent
+            normalize = True
             logger.info(f'Trying to use metadata in {metadataPath} ...')
         # generate dataset
         datasetCsv = workingPath.with_suffix('.csv')
         df = ensemble.CreateDataset(
             folder=metadataPath, 
             csvPath=datasetCsv, 
-            properties=[ 'subtitles', 'position', 'duration', 'duration_prev', 'duration_next', 'logo'])
+            properties=[ 'subtitles', 'position', 'duration', 'duration_prev', 'duration_next', 'logo'],
+            normalize=normalize)
         if df is not None:
             # train the model using Adaboost
             dataset = ensemble.LoadDataset(csvPath=datasetCsv)
@@ -86,12 +88,12 @@ def Mark(item, epgStation):
             clf = ensemble.Train(dataset)
             # predict
             model = clf, columns
-            ensemble.MarkerMap(markerPath, PtsMap(indexPath)).MarkAll(model)
+            ensemble.MarkerMap(markerPath, PtsMap(indexPath)).MarkAll(model, normalize=normalize)
         else:
             logger.warn(f'No metadata is found in {metadataPath}!')
             byEnsemble = False
 
-def Cut(item, epgStation):
+def Cut(item, epgStation: EPGStation):
     path = Path(item['path'])
     cache = Path(item['cache']).expanduser()
     destination = Path(item['destination'])
@@ -129,57 +131,41 @@ def Confirm(item):
         logger.warning("*** Re-encoding is needed! ***")
     return isReEncodingNeeded
 
-def Encode(item, encoder, epgStation):
+def Encode(item, encoder: str, epgStation: EPGStation):
     path = Path(item['path'])
-    cache = Path(item['cache']).expanduser()
     destination = Path(item['destination'])
-    workingPath = cache / path.name
-
-    logger.info('Copying TS file to working folder ...')
-    workingPath = cache / path.name
-    CopyWithProgress(path, workingPath, epgStation=epgStation)
-
-    logger.info('Extracting program from TS ...')
-    indexPath = destination / '_metadata' / (workingPath.stem + '.ptsmap')
-    markerPath = destination / '_metadata' / (workingPath.stem + '.markermap')
     byGroup = item.get('encoder', {}).get('bygroup', False)
     splitNum = item.get('encoder', {}).get('split', 1)
-    programTsList = ExtractPrograms(
-        videoPath=workingPath,
-        ptsMap=PtsMap(indexPath),
-        markerMap=tsmarker.common.MarkerMap(markerPath, None),
-        byGroup=byGroup,
-        splitNum=splitNum)
+    preset = item['encoder']['preset']
+    cropdetect = item['encoder'].get('cropdetect')
+    ptsMap = PtsMap(destination / '_metadata' / path.with_suffix('.ptsmap').name)
+    markerMap = MarkerMap(destination / '_metadata' /  path.with_suffix('.markermap').name, ptsMap)
+
+    logger.info('Copying TS file to working folder ...')
+    cache = Path(item['cache']).expanduser()
+    workingPath = cache / path.name
+    CopyWithProgress(path, workingPath, epgStation=epgStation)
     
-    for programTsPath in programTsList:
-        logger.info('Extracting subtitles ...')
-        subtitlesPathList = subtitles.Extract(programTsPath)
-        subtitlesPathList = [ path.replace(path.with_name(path.name.replace('_prog.', '_prog.jpn.'))) for path in subtitlesPathList ]
+    outFile = workingPath.with_suffix('.mp4')
+    EncodePipeline(
+        inFile=workingPath,
+        ptsMap=ptsMap,
+        markerMap=markerMap,
+        outFile=outFile,
+        byGroup=byGroup,
+        splitNum=splitNum,
+        preset=preset,
+        cropdetect=cropdetect,
+        encoder=encoder)
 
-        inputFile = InputFile(programTsPath)
-        if item.get('encoder', {}).get('repack', False):
-            strippedTsPath = inputFile.StripAndRepackTS()
-        else:
-            try:
-                strippedTsPath = inputFile.StripTS(fixAudio=True)
-            except EncodingError:
-                logger.info('Striping failed again, trying to strip without mapping ...')
-                strippedTsPath = inputFile.StripTS(nomap=True)
-        programTsPath.unlink()
-
-        preset = item['encoder']['preset']
-        cropdetect = item['encoder'].get('cropdetect')
-        inputFile = InputFile(strippedTsPath)
-        encodedPath = inputFile.EncodeTS(preset, cropdetect, encoder, strippedTsPath.with_suffix('.mp4'))
-        strippedTsPath.unlink()
-
-        logger.info('Uploading processed files ...')
-        encodedFile = destination / encodedPath.name.replace('_stripped', '')
-        CopyWithProgress(encodedPath, encodedFile, epgStation=epgStation)
-        if subtitlesPathList:
-            for path in subtitlesPathList:
-                CopyWithProgress(path, destination / Path('Subtitles') / Path(path.name), force=True, epgStation=epgStation)
-    return encodedFile
+    logger.info('Uploading processed files ...')
+    for p in cache.glob('*.*'):
+        if p.stem == path.stem:
+            if p.suffix == '.mp4':
+                CopyWithProgress(p, destination / p.name, epgStation=epgStation)
+            elif p.suffix in ('.ass', '.srt'):
+                CopyWithProgress(p, destination / 'Subtitles' / p.name, epgStation=epgStation)
+    return outFile
 
 def Cleanup(item):
     logger.info('Cleaning up ...')

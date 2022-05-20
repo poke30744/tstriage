@@ -6,12 +6,50 @@ import numpy as np
 from PIL import Image
 from tscutter import common
 from tscutter.common import ClipToFilename
+from tscutter.ffmpeg import InputFile
 from tsmarker.logo import drawEdges, cv2imread, cv2imwrite
-from tsmarker.common import MarkerMap
-from .encode import presets
-from .common import ExtractProgramList
+import tsmarker.common
 
 logger = logging.getLogger('tstriage.pipeline')
+
+presets = {
+    'drama': {
+        'videoFilter': 'bwdif=0',
+        'bitrate': '2500k',
+        'maxRate': '5000k',
+        'crf': '19',
+    },
+    'drama720p': {
+        'videoFilter': 'bwdif=0,scale=1280:720',
+        'bitrate': '1500k',
+        'maxRate': '3000k',
+        'crf': '19',
+    },
+    'anime': {
+        'videoFilter': 'pullup,fps=24000/1001',
+        'bitrate': '2500k',
+        'maxRate': '5000k',
+        'crf': '19',
+    },
+    'anime720p': {
+        'videoFilter': 'pullup,fps=24000/1001,scale=1280:720',
+        'bitrate': '1500k',
+        'maxRate': '3000k',
+        'crf': '19',
+    },
+    'anime480p': {
+        'videoFilter': 'pullup,fps=24000/1001,scale=852:480',
+        'bitrate': '750k',
+        'maxRate': '1500k',
+        'crf': '19',
+    },
+    'bluedvd': {
+        'videoFilter': '',
+        'bitrate': '2500k',
+        'maxRate': '5000k',
+        'crf': '19',
+    },
+}
 
 def StripTsCmd(inFile, outFile, audioLanguages=['jpn'], fixAudio=False, noMap=False):
     args = [
@@ -33,7 +71,7 @@ def StripTsCmd(inFile, outFile, audioLanguages=['jpn'], fixAudio=False, noMap=Fa
     args += [ '-f', 'mpegts', outFile ]
     return args
 
-def EncodeTsCmd(inPath, outPath, preset, encoder, crop={}):
+def EncodeTsCmd(inPath, outPath, preset, encoder, crop=None):
     preset = presets[preset]
     videoFilter = preset['videoFilter']
     if crop:    
@@ -88,15 +126,23 @@ def ExtractAreaCmd(inFile, folder, crop=None, ss=None, to=None, fps='1/1'):
     args += [ f'{folder}/out%8d.bmp' ]
     return args
 
-
 class Tee(object):
-    def __init__(self, outPipes, pbar=None):
+    def __init__(self, outPipes: list, couldBeBroken: list=[], pbar=None):
         self.outPipes = outPipes
+        self.couldBeBroken = couldBeBroken
         self.pbar = pbar
 
     def write(self, data):
+        brokenPipes = []
         for pipe in self.outPipes:
-            pipe.write(data)
+            if not pipe in brokenPipes:
+                try:
+                    pipe.write(data)
+                except (BrokenPipeError, OSError):
+                    if pipe in self.couldBeBroken:
+                        brokenPipes.append(pipe)
+                    else:
+                        raise
         if self.pbar is not None:
             self.pbar.update(len(data))
     
@@ -133,14 +179,91 @@ class PtsMap(common.PtsMap):
 
                 thread.join()
 
-def EncodePipeline(inFile, ptsMap: PtsMap, markerMap: MarkerMap, byGroup, preset, encoder):
-    programClipsList = ExtractProgramList(markerMap, byGroup)
+class MarkerMap(tsmarker.common.MarkerMap):
+    def GetProgramClips(self) -> list:
+        if '_groundtruth' in self.Properties():
+            clips = [ clip for clip in self.Clips() if self.Value(clip, '_groundtruth') == 1.0 ]
+            logger.info('Use _groundtruth to retrieve program clips ...')
+        elif '_ensemble' in self.Properties():
+            clips = [ clip for clip in self.Clips() if self.Value(clip, '_ensemble') == 1.0 ]
+            logger.info('Use _ensemble to retrieve program clips ...')
+        else:
+            clips = [ clip for clip in self.Clips() if self.Value(clip, 'subtitles') == 1.0 ]
+            logger.info('Use subtitles to retrieve program clips ...')
+        return clips
+    
+    def MergeNeighbors(clips: list) -> list:
+         # merge neighbor clips
+        mergedClips = []
+        for clip in clips:
+            if mergedClips == []:
+                mergedClips.append(clip)
+            else:
+                previousClip = mergedClips.pop()
+                if previousClip[1] == clip[0]:
+                    mergedClips.append((previousClip[0], clip[1]))
+                else:
+                    mergedClips.append(previousClip)
+                    mergedClips.append(clip)
+        return mergedClips
+
+    def GetClipsDuration(clips):
+        duration = 0
+        for clip in clips:
+            duration += clip[1] - clip[0]
+        return duration
+
+    def SplitClips(programClips: list, num: int) -> list[list]:
+        splittedClips = []
+        programsDuration = MarkerMap.GetClipsDuration(programClips)
+        for i in range(num):
+            clips = []
+            while programClips != []:
+                clips.append(programClips.pop(0))
+                if 0.95 < MarkerMap.GetClipsDuration(clips) / programsDuration * num < 1.05:
+                    break
+            clips += programClips
+            splittedClips.append(clips)
+        return splittedClips
+
+def EncodePipeline(inFile: Path, ptsMap: PtsMap, markerMap: MarkerMap, outFile: Path, byGroup: bool, splitNum: int, preset: str, cropdetect: bool, encoder: str):
+    programClips = markerMap.GetProgramClips()
+    if splitNum > 1:
+        programClipsList = [ MarkerMap.MergeNeighbors(clips) for clips in MarkerMap.SplitClips(programClips, splitNum) ]
+    elif byGroup:
+        programClipsList = [ [clip] for clip in MarkerMap.MergeNeighbors(programClips) ]
+    else:
+        programClipsList = [ MarkerMap.MergeNeighbors(programClips) ]
+    cropInfo = None
+    if cropdetect:
+        with tempfile.TemporaryDirectory(prefix='EncodePipeline_') as tmpFolder:
+            logoPath = Path(tmpFolder) / (inFile.stem + '_logo.png')
+            ExtractLogoPipeline(inFile, ptsMap, logoPath, maxTimeToExtract=10, removeBoarder=False)
+            cropInfo = CropDetectPipeline(logoPath)
+            if cropInfo is not None:
+                # double check if cropping is really needed
+                videoInfo = InputFile(inFile).GetInfo()
+                sar = videoInfo['sar']
+                w, h = cropInfo['w'], cropInfo['h']
+                for dar in ((16, 9), (4, 3), (1,1), (999, 999)):
+                    if 0.95 < w * sar[0] / (h * sar[1]) / (dar[0] / dar[1]) < 1.05:
+                        break
+                zoomRate = w * h / (videoInfo['width'] * videoInfo['height'])
+                if dar[0] != 999 and zoomRate < 0.9:
+                    cropInfo['dar'], cropInfo['sar'] = dar, videoInfo['sar']
+                else:
+                    cropInfo = None
     for i in range(len(programClipsList)):
         with open('encode.log', 'w') as encodeLogs, open('strip.log', 'w') as stripLogs:
             # encode
-            outFile = inFile.with_stem(f'{inFile.stem}_{i}').with_suffix('.mp4')
-            logger.info(f'Encoding {outFile.name} ...')
-            encodeTsP = subprocess.Popen(EncodeTsCmd('-', outFile, preset, encoder), stdin=subprocess.PIPE, stderr=encodeLogs)
+            if byGroup:
+                currentOutFile = outFile.parent / f'{outFile.stem}_{i}.mp4'
+            else:
+                currentOutFile = outFile
+            logger.info(f'Encoding {currentOutFile.name} ...')
+            if currentOutFile.exists():
+                currentOutFile.unlink()
+            encodeTsP = subprocess.Popen(EncodeTsCmd('-', currentOutFile, preset, encoder, cropInfo), stdin=subprocess.PIPE, stderr=encodeLogs)
             with encodeTsP :
                 # strip
                 stripTsP = subprocess.Popen(StripTsCmd('-', '-'), stdin=subprocess.PIPE, stdout=encodeTsP.stdin, stderr=stripLogs)
@@ -148,14 +271,14 @@ def EncodePipeline(inFile, ptsMap: PtsMap, markerMap: MarkerMap, byGroup, preset
                 startupinfo = subprocess.STARTUPINFO(wShowWindow=6, dwFlags=subprocess.STARTF_USESHOWWINDOW) if hasattr(subprocess, 'STARTUPINFO') else None
                 creationflags = subprocess.CREATE_NEW_CONSOLE if hasattr(subprocess, 'CREATE_NEW_CONSOLE') else 0
                 subtitlesP = subprocess.Popen(    
-                    ['Captain2AssC.cmd', '-', outFile.with_suffix('') ],
+                    f'Captain2AssC.cmd - "{currentOutFile.with_suffix("")}"',
                     stdin=subprocess.PIPE,
                     startupinfo=startupinfo,
                     creationflags=creationflags,
                     shell=True)
                 with stripTsP, subtitlesP:
                     # extract (data pump)
-                    teeFile = Tee(outPipes=[stripTsP.stdin, subtitlesP.stdin])
+                    teeFile = Tee(outPipes=[stripTsP.stdin, subtitlesP.stdin], couldBeBroken=[subtitlesP.stdin])
                     clips = programClipsList[i]
                     ptsMap.ExtractClipsPipe(inFile, clips, teeFile, quiet=False)
 
@@ -256,12 +379,17 @@ def CropDetectPipeline(videoEdgePath, threshold=0.3):
     xAxis = videoEdges.mean(axis=0)
     yAxis = videoEdges.mean(axis=1)
     try:
-        x1, x2 = np.argwhere(xAxis > 255 * threshold).flatten()
-        y1, y2 = np.argwhere(yAxis > 255 * threshold).flatten()
+        xBoarders = np.argwhere(xAxis > 255 * threshold).flatten()
+        yBoarders = np.argwhere(yAxis > 255 * threshold).flatten()
+        # detect boarder like below
+        # ........||.............|..........
+        # ......|.............|||..........
+        x1, x2 = (xBoarders[0], xBoarders[-1]) if len(xBoarders) >= 2 else (0, len(xAxis) - 1)
+        y1, y2 = (yBoarders[0], yBoarders[-1]) if len(yBoarders) >= 2 else (0, len(yAxis) - 1)
         w = x2 - x1 + 1
         h = y2 - y1 + 1
         return { 'w': w, 'h': h, 'x': x1, 'y': y1 }
-    except ValueError:
+    except IndexError:
         return None
 
 if __name__ == "__main__":
@@ -272,7 +400,9 @@ if __name__ == "__main__":
     subparser.add_argument('--input', '-i', required=True, help='input mpegts path')
     subparser.add_argument('--bygroup', action='store_true', help='extract into groups')
     subparser.add_argument('--preset', default='drama', help='encoder preset string')
+    subparser.add_argument('--cropdetect', '-c', action='store_true', help='detect and crop still area')
     subparser.add_argument('--encoder', default='nvenc_h264', help='FFmpeg encoder name')
+    subparser.add_argument('--notag', action='store_true', help="don't add tag to output filename")
 
     subparser = subparsers.add_parser('logo', help='extract logo from mpegts file')
     subparser.add_argument('--input', '-i', required=True, help='input mpegts path')
@@ -288,16 +418,28 @@ if __name__ == "__main__":
 
     if args.command == 'encode':
         inFile = Path(args.input)
-        indexPath = inFile.parent / '_metadata' / (inFile.stem + '.ptsmap')
-        markerPath = inFile.parent / '_metadata' / (inFile.stem + '.markermap')
-        ptsMap = PtsMap(indexPath)
-        markerMap = MarkerMap(markerPath, ptsMap)
-        EncodePipeline(inFile, ptsMap=ptsMap, markerMap=markerMap, byGroup=args.bygroup, preset=args.preset, encoder=args.encoder)
+        ptsMap = PtsMap(inFile.parent / '_metadata' / (inFile.stem + '.ptsmap'))
+        markerMap = MarkerMap(inFile.parent / '_metadata' / (inFile.stem + '.markermap'), ptsMap)
+        outputPath = inFile.with_suffix('.mp4') if args.notag else inFile.parent / f'{inFile.stem}_({args.preset}_{args.encoder}_crf{presets[args.preset]["crf"]}).mp4'
+        EncodePipeline(
+            inFile=inFile,
+            ptsMap=ptsMap,
+            markerMap=markerMap,
+            outFile=outputPath,
+            byGroup=args.bygroup,
+            splitNum=1,
+            preset=args.preset,
+            cropdetect=args.cropdetect,
+            encoder=args.encoder)
     elif args.command == 'logo':
         inFile = Path(args.input)
         outFile = inFile.with_suffix('.logo.png')
         indexPath = inFile.parent / '_metadata' / (inFile.stem + '.ptsmap')
         ExtractLogoPipeline(inFile, PtsMap(indexPath), outFile)
     elif args.command == 'cropdetect':
-        cropInfo = CropDetectPipeline(Path(args.input))
+        inFile = Path(args.input)
+        indexPath = inFile.parent / '_metadata' / (inFile.stem + '.ptsmap')
+        logoPath = inFile.parent / (inFile.stem + '_CropLogo.png')
+        ExtractLogoPipeline(inFile, PtsMap(indexPath), logoPath, maxTimeToExtract=10, removeBoarder=False)
+        cropInfo = CropDetectPipeline(logoPath)
         print(cropInfo)

@@ -11,7 +11,7 @@ class EPGStation:
         self.channelsJsonPath = Path('channels.json') if cache is None else Path(cache).expanduser() / 'channels.json'
         self._notBusyTill = None
     
-    def LoadReservesList(self):
+    def LoadReservesList(self) -> dict:
         if self.reservesJsonPath.exists():
             lastModifiedTime = datetime.fromtimestamp(self.reservesJsonPath.stat().st_mtime)
             if datetime.now() - lastModifiedTime > timedelta(hours=8):
@@ -23,7 +23,7 @@ class EPGStation:
         with self.reservesJsonPath.open(encoding='utf-8') as f:
             return json.load(f)['reserves']
 
-    def IsBusy(self, at=None, duration=None):
+    def IsBusy(self, at=None, duration=None) -> bool:
         at = datetime.now() if at is None else at
         duration = timedelta(minutes=30) if duration is None else duration    
         for item in self.LoadReservesList():
@@ -34,14 +34,14 @@ class EPGStation:
                     return True
         return False
     
-    def BusyWait(self, granularity=30):
+    def BusyWait(self, granularity=30) -> None:
         if self._notBusyTill is None or self._notBusyTill < datetime.now():
             duration = granularity * 2
             while self.IsBusy(duration=timedelta(seconds=duration)):
                 time.sleep(duration)
             self._notBusyTill = datetime.now() + timedelta(seconds=granularity)
 
-    def GetChannels(self):
+    def GetChannels(self) -> dict:
         if self.channelsJsonPath.exists():
             with self.channelsJsonPath.open(encoding='utf8') as f:
                 return json.load(f)
@@ -52,7 +52,7 @@ class EPGStation:
                 json.dump(channels, f)
             return channels
 
-    def GetEPG(self, path, limit=24):
+    def GetEPG(self, path, limit=24) -> dict:
         with urllib.request.urlopen(f'{self.url}/api/recorded?isHalfWidth=true&limit={limit}&offset=0&reverse=false') as response:
             recorded = json.load(response)
             for epg in recorded['records']:
@@ -60,7 +60,7 @@ class EPGStation:
                 if Path(filename).stem in Path(path).stem:
                     return epg
     
-    def GenerateDescription(self, epg, channels):
+    def GenerateDescription(self, epg, channels) -> str:
         with io.StringIO() as f:
             print(epg['name'], file=f)
             print('', file=f)
