@@ -31,10 +31,9 @@ def Analyze(item, epgStation: EPGStation):
     logger.info('Extracting EPG ...')
     EPG.Dump(workingPath)
     epgPath = workingPath.with_suffix('.epg')
-    txtPath = workingPath.with_suffix('.txt')
     CopyWithProgress(epgPath, destination / '_metadata' / epgPath.name)
     epg = EPG(epgPath, inputFile,  epgStation.GetChannels())
-    epg.OutputDesc(destination / txtPath.name)
+    epg.OutputDesc(destination / workingPath.with_suffix('.yaml').name)
     epgPath.unlink()
 
     logger.info('Extracting subtitles ...')

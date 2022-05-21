@@ -1,4 +1,4 @@
-import os, subprocess, json, unicodedata, time, argparse, re
+import os, subprocess, json, unicodedata, time, argparse, re, copy
 from pathlib import Path
 import logging
 import yaml
@@ -6,6 +6,13 @@ from tscutter.common import TsFileNotFound, InvalidTsFormat, CheckExtenralComman
 from tscutter.ffmpeg import InputFile
 
 logger = logging.getLogger('tstriage.epg')
+
+def represent_str(dumper, instance):
+    if "\n" in instance:
+        return dumper.represent_scalar('tag:yaml.org,2002:str', instance, style='|')
+    else:
+        return dumper.represent_scalar('tag:yaml.org,2002:str', instance)
+yaml.add_representer(str, represent_str)
 
 class EPG:
     def Dump(videoPath):
@@ -61,19 +68,23 @@ class EPG:
                 return item['name']
 
     def OutputDesc(self, txtPath: Path) -> None:
-        with txtPath.open('w', encoding='utf8') as f:
-            print(self.Info()['name'], file=f)
-            print('', file=f)
-            print(self.Info()['description'], file=f)
-            print('', file=f)
-            if 'extended' in self.Info():
-                for k in self.Info()['extended']:
-                    print(k, file=f)
-                    print(self.Info()['extended'][k], file=f)
-            print('', file=f)
-            print(f'Channel: {self.Channel()}', file=f)
-            print(f'serviceId: {self.ServiceId()}', file=f)
-            print(f"{time.strftime('%Y-%m-%d %H:%M (%a)', time.localtime(self.Info()['startAt'] / 1000))} ~ {round(self.Info()['duration'] / 1000 / 60)} mins", file=f)
+        info = self.Info()
+        newInfo = {
+            'name': info['name'],
+            'description': info['description'],
+            'extended': { k : v.replace('\r', '') for k, v in copy.deepcopy(info['extended']).items() }
+        }
+        for k in info.keys():
+            if not k in newInfo:
+                newInfo[k] = info[k]
+                if k == 'serviceId':
+                    newInfo['serviceId_desc'] = self.Channel()
+                elif k == 'startAt':
+                    newInfo['startAt_desc'] = time.strftime('%Y-%m-%d %H:%M (%a)', time.localtime(self.Info()['startAt'] / 1000))
+                elif k == 'duration':
+                    newInfo['duration_desc'] = f'{round(info["duration"] / 1000 / 60)} mins'
+        with txtPath.open('w', encoding='utf-8') as f:
+            yaml.dump(newInfo, f, encoding='utf-8', allow_unicode=True, sort_keys=False, default_flow_style=False)
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Dump EPG from TS files')
