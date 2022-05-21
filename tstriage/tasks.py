@@ -42,7 +42,8 @@ def Analyze(item, epgStation: EPGStation):
              CopyWithProgress(sub, destination / '_metadata' / sub.with_suffix('.ass.original').name)
         sub.unlink()
     
-    logoPath = (path.parent / '_tstriage' / epg.Channel()).with_suffix('.png')
+    info = inputFile.GetInfo()
+    logoPath = (path.parent / '_tstriage' / f'{epg.Channel()}_{info["width"]}x{info["height"]}').with_suffix('.png')
     if not logoPath.exists():
         ExtractLogoPipeline(inFile=workingPath, ptsMap=PtsMap(indexPath), outFile=logoPath)
 
@@ -62,7 +63,8 @@ def Mark(item, epgStation: EPGStation):
     subtitles.MarkerMap(markerPath, PtsMap(indexPath)).MarkAll(videoPath=workingPath, assPath=destination / '_metadata' / path.with_suffix('.ass.original').name)
     clipinfo.MarkerMap(markerPath, PtsMap(indexPath)).MarkAll(videoPath=workingPath, quiet=False)
     epg = EPG(destination / '_metadata' / path.with_suffix('.epg').name, inputFile, epgStation.GetChannels())
-    logoPath = (path.parent / '_tstriage' / epg.Channel()).with_suffix('.png')
+    info = inputFile.GetInfo()
+    logoPath = (path.parent / '_tstriage' / f'{epg.Channel()}_{info["width"]}x{info["height"]}').with_suffix('.png')
     logo.MarkerMap(markerPath, PtsMap(indexPath)).MarkAll(videoPath=workingPath, logoPath=logoPath, quiet=False)
 
     noEnsemble = item['marker'].get('noEnsemble', False)

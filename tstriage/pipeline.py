@@ -129,6 +129,7 @@ class Tee(object):
     def close(self):
         for pipe in self.outPipes:
             pipe.close()
+
 class MarkerMap(tsmarker.common.MarkerMap):
     def GetProgramClips(self) -> list:
         if '_groundtruth' in self.Properties():
