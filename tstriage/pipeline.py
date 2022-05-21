@@ -1,5 +1,6 @@
 import logging, subprocess, argparse, os, tempfile
 from pathlib import Path
+import pysubs2
 from tscutter.ffmpeg import InputFile
 from tsmarker.pipeline import PtsMap, ExtractLogoPipeline, CropDetectPipeline
 import tsmarker.common
@@ -230,6 +231,12 @@ def EncodePipeline(inFile: Path, ptsMap: PtsMap, markerMap: MarkerMap, outFile: 
                     teeFile = Tee(outPipes=[stripTsP.stdin, subtitlesP.stdin], couldBeBroken=[subtitlesP.stdin])
                     clips = programClipsList[i]
                     ptsMap.ExtractClipsPipe(inFile, clips, teeFile, quiet=False)
+            logger.info('Trying to fix issues in subtitles ...')
+            for suffix in ('.ass', '.srt'):
+                subPath = currentOutFile.with_suffix(suffix)
+                if subPath.exists():
+                    subtitles = pysubs2.load(str(subPath), encoding='utf-8')
+                    subtitles.save(subPath)
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Process TS files in pipeline')
