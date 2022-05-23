@@ -185,6 +185,12 @@ def EncodePipeline(inFile: Path, ptsMap: PtsMap, markerMap: MarkerMap, outFile: 
         programClipsList = [ [clip] for clip in MarkerMap.MergeNeighbors(programClips) ]
     else:
         programClipsList = [ MarkerMap.MergeNeighbors(programClips) ]
+    programLength = 0
+    for clips in programClipsList:
+        for clip in clips:
+            programLength += clip[1] - clip[0]
+    logger.info(f'Extracted Program length: {programLength}')
+    logger.info(f'Will be encoded into {len(programClipsList)} files')
     cropInfo = None
     if cropdetect:
         with tempfile.TemporaryDirectory(prefix='EncodePipeline_') as tmpFolder:
