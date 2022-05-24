@@ -1,7 +1,7 @@
 import logging, subprocess, argparse, os, tempfile
 from pathlib import Path
 import pysubs2
-from tscutter.ffmpeg import InputFile
+from tscutter import ffmpeg
 from tsmarker.pipeline import PtsMap, ExtractLogoPipeline, CropDetectPipeline
 import tsmarker.common
 
@@ -46,65 +46,66 @@ presets = {
     },
 }
 
-def StripTsCmd(inFile, outFile, audioLanguages=['jpn'], fixAudio=False, noMap=False):
-    args = [
-        'ffmpeg', '-hide_banner', '-y',
-        '-i', inFile,
-        '-c:v', 'copy'
-    ]
-    if fixAudio:
-        args += [ 
-            '-af',  'aresample=async=1',
-            '-c:a', 'aac'
+class InputFile(ffmpeg.InputFile):
+    def StripTsCmd(self, inFile, outFile, audioLanguages=['jpn'], fixAudio=False, noMap=False):
+        args = [
+            self.ffmpeg, '-hide_banner', '-y',
+            '-i', inFile,
+            '-c:v', 'copy'
         ]
-    else:
-        args += [ '-c:a', 'copy' ]
-    if not noMap:
-        args += [ '-map', '0:v', '-map', '0:a', '-ignore_unknown' ]
-        for i in range(len(audioLanguages)):
-            args += [ f'-metadata:s:a:{i}', f'language={audioLanguages[i]}' ]
-    args += [ '-f', 'mpegts', outFile ]
-    return args
-
-def EncodeTsCmd(inPath, outPath, preset, encoder, crop=None):
-    preset = presets[preset]
-    videoFilter = preset['videoFilter']
-    if crop:    
-        filters = preset['videoFilter'].split(',')
-        w, h, x, y, dar, sar = crop['w'], crop['h'], crop['x'], crop['y'], crop['dar'], crop['sar']
-        cropStr = f'crop={w}:{h}:{x}:{y},setdar=dar={dar[0]}/{dar[1]}'
-        filters.insert(0, cropStr)
-        if 'scale=' in filters[-1]:
-            scale = filters.pop().replace('scale=', '').split(':')
-            scale_h = int(scale[1])
-            scale_w = round(scale_h * dar[0] * sar[1] / dar[1] / sar[0])
-            filters.append(f'scale={scale_w}:{scale_h}')
+        if fixAudio:
+            args += [ 
+                '-af',  'aresample=async=1',
+                '-c:a', 'aac'
+            ]
         else:
-            scale_h = round(h / dar[1] / sar[0]) * dar[1] * sar[0]
-            scale_w = round(scale_h * dar[0] * sar[1] / dar[1] / sar[0])
-            filters.append(f'scale={scale_w}:{scale_h}')
-        videoFilter = ','.join(filters)
-    if '_nvenc' in encoder:
-        videoCodec = [ '-c:v', encoder, '-rc:v', 'vbr_hq', '-cq:v', preset['crf'], '-b:v', preset['bitrate'], '-maxrate:v', preset['maxRate'], '-profile:v', 'high' ]
-    elif '_videotoolbox' in encoder:
-        videoCodec = [ '-c:v', encoder, '-b:v', preset['bitrate'], '-maxrate:v',  preset['maxRate'] ]
-    else:
-        videoCodec = [ '-c:v', encoder, '-crf', preset['crf'] ]
-    args = [
-        'ffmpeg', '-hide_banner', '-y',
-        '-i', inPath
-    ]
-    if len(videoFilter) > 0:
-        args += [ '-vf', videoFilter ]
-    args += videoCodec + [
-        #https://stackoverflow.com/questions/49686244/ffmpeg-too-many-packets-buffered-for-output-stream-01
-        #'-max_muxing_queue_size', '1024',
-    ]
-    # TODO: support opt-in encoding audio
-    args += [ '-c:a', 'copy', '-bsf:a', 'aac_adtstoasc' ]
-    args += [ '-map', '0:v', '-map', '0:a', '-ignore_unknown' ]
-    args += [ outPath ]
-    return args
+            args += [ '-c:a', 'copy' ]
+        if not noMap:
+            args += [ '-map', '0:v', '-map', '0:a', '-ignore_unknown' ]
+            for i in range(len(audioLanguages)):
+                args += [ f'-metadata:s:a:{i}', f'language={audioLanguages[i]}' ]
+        args += [ '-f', 'mpegts', outFile ]
+        return args
+
+    def EncodeTsCmd(self, inPath, outPath, preset, encoder, crop=None):
+        preset = presets[preset]
+        videoFilter = preset['videoFilter']
+        if crop:    
+            filters = preset['videoFilter'].split(',')
+            w, h, x, y, dar, sar = crop['w'], crop['h'], crop['x'], crop['y'], crop['dar'], crop['sar']
+            cropStr = f'crop={w}:{h}:{x}:{y},setdar=dar={dar[0]}/{dar[1]}'
+            filters.insert(0, cropStr)
+            if 'scale=' in filters[-1]:
+                scale = filters.pop().replace('scale=', '').split(':')
+                scale_h = int(scale[1])
+                scale_w = round(scale_h * dar[0] * sar[1] / dar[1] / sar[0])
+                filters.append(f'scale={scale_w}:{scale_h}')
+            else:
+                scale_h = round(h / dar[1] / sar[0]) * dar[1] * sar[0]
+                scale_w = round(scale_h * dar[0] * sar[1] / dar[1] / sar[0])
+                filters.append(f'scale={scale_w}:{scale_h}')
+            videoFilter = ','.join(filters)
+        if '_nvenc' in encoder:
+            videoCodec = [ '-c:v', encoder, '-rc:v', 'vbr_hq', '-cq:v', preset['crf'], '-b:v', preset['bitrate'], '-maxrate:v', preset['maxRate'], '-profile:v', 'high' ]
+        elif '_videotoolbox' in encoder:
+            videoCodec = [ '-c:v', encoder, '-b:v', preset['bitrate'], '-maxrate:v',  preset['maxRate'] ]
+        else:
+            videoCodec = [ '-c:v', encoder, '-crf', preset['crf'] ]
+        args = [
+            self.ffmpeg, '-hide_banner', '-y',
+            '-i', inPath
+        ]
+        if len(videoFilter) > 0:
+            args += [ '-vf', videoFilter ]
+        args += videoCodec + [
+            #https://stackoverflow.com/questions/49686244/ffmpeg-too-many-packets-buffered-for-output-stream-01
+            #'-max_muxing_queue_size', '1024',
+        ]
+        # TODO: support opt-in encoding audio
+        args += [ '-c:a', 'copy', '-bsf:a', 'aac_adtstoasc' ]
+        args += [ '-map', '0:v', '-map', '0:a', '-ignore_unknown' ]
+        args += [ outPath ]
+        return args
 
 class Tee(object):
     def __init__(self, outPipes: list, couldBeBroken: list=[], pbar=None):
@@ -210,6 +211,7 @@ def EncodePipeline(inFile: Path, ptsMap: PtsMap, markerMap: MarkerMap, outFile: 
                     cropInfo['dar'], cropInfo['sar'] = dar, videoInfo['sar']
                 else:
                     cropInfo = None
+    inputFile = InputFile(inFile)
     for i in range(len(programClipsList)):
         with open('encode.log', 'w') as encodeLogs, open('strip.log', 'w') as stripLogs:
             # encode
@@ -220,10 +222,10 @@ def EncodePipeline(inFile: Path, ptsMap: PtsMap, markerMap: MarkerMap, outFile: 
             logger.info(f'Encoding {currentOutFile.name} ...')
             if currentOutFile.exists():
                 currentOutFile.unlink()
-            encodeTsP = subprocess.Popen(EncodeTsCmd('-', currentOutFile, preset, encoder, cropInfo), stdin=subprocess.PIPE, stderr=encodeLogs)
+            encodeTsP = subprocess.Popen(inputFile.EncodeTsCmd('-', currentOutFile, preset, encoder, cropInfo), stdin=subprocess.PIPE, stderr=encodeLogs)
             with encodeTsP :
                 # strip
-                stripTsP = subprocess.Popen(StripTsCmd('-', '-'), stdin=subprocess.PIPE, stdout=encodeTsP.stdin, stderr=stripLogs)
+                stripTsP = subprocess.Popen(inputFile.StripTsCmd('-', '-'), stdin=subprocess.PIPE, stdout=encodeTsP.stdin, stderr=stripLogs)
                 # subtitles
                 startupinfo = subprocess.STARTUPINFO(wShowWindow=6, dwFlags=subprocess.STARTF_USESHOWWINDOW) if hasattr(subprocess, 'STARTUPINFO') else None
                 creationflags = subprocess.CREATE_NEW_CONSOLE if hasattr(subprocess, 'CREATE_NEW_CONSOLE') else 0
