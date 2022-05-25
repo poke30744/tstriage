@@ -1,6 +1,7 @@
 import shutil, logging
 from pathlib import Path
 from tqdm import tqdm
+from .epgstation import EPGStation
 
 logger = logging.getLogger('tstriage.common')
 
@@ -28,8 +29,7 @@ class WindowsInhibitor:
     def __exit__(self, exc_type, exc_value, traceback):
         WindowsInhibitor.uninhibit()
 
-def CopyWithProgress(srcPath, dstPath, force=False, epgStation=None):
-    srcPath, dstPath = Path(srcPath), Path(dstPath)
+def CopyWithProgress(srcPath: Path, dstPath: Path, force: bool=False, epgStation: EPGStation=None):
     if not srcPath.exists():
         raise FileNotFoundError()
     if not force and dstPath.is_file() and srcPath.stat().st_size == dstPath.stat().st_size and round(srcPath.stat().st_mtime) == round(dstPath.stat().st_mtime):
@@ -40,6 +40,9 @@ def CopyWithProgress(srcPath, dstPath, force=False, epgStation=None):
             logger.warn(f'Removing {dstPath} ...')
         logger.info(f'Copying {srcPath.name} ...')
     Path(dstPath).parent.mkdir(parents=True, exist_ok=True)
+    if epgStation is not None:
+        if not srcPath.is_relative_to(epgStation.recorded) and not dstPath.is_relative_to(epgStation.recorded):
+            epgStation = None # no need to block copying
     with open(srcPath, 'rb') as rf:
         with open(dstPath, 'wb') as wf:
             with tqdm(total=srcPath.stat().st_size, unit_scale=True, unit='M') as pbar:

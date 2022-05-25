@@ -5,11 +5,12 @@ import urllib.request, urllib.parse, shutil, json, time, logging, argparse, io
 logger = logging.getLogger('tstriage.epgstation')
 
 class EPGStation:
-    def __init__(self, url, cache=None):
+    def __init__(self, url: str, cache: Path=None, recorded: Path=None):
         self.url = url
         self.reservesJsonPath = Path('reserves.json') if cache is None else Path(cache).expanduser() / 'reserves.json'
         self.channelsJsonPath = Path('channels.json') if cache is None else Path(cache).expanduser() / 'channels.json'
         self._notBusyTill = None
+        self.recorded = recorded
     
     def LoadReservesList(self) -> dict:
         if self.reservesJsonPath.exists():

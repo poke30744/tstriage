@@ -22,7 +22,7 @@ class Runner:
             self.encoder = configuration['Encoder']
         else:
             self.encoder = 'h264'
-        self.epgStation = EPGStation(url=configuration['EPGStation'], cache=configuration['Cache']) if 'EPGStation' in configuration else None
+        self.epgStation = EPGStation(url=configuration['EPGStation'], cache=configuration['Cache'], recorded=configuration['Uncategoried']) if 'EPGStation' in configuration else None
         self.nas = NAS(
             recorded=Path(self.configuration['Uncategoried']),
             destination=Path(configuration['Destination']),
