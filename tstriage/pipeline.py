@@ -215,7 +215,7 @@ def EncodePipeline(inFile: Path, ptsMap: PtsMap, markerMap: MarkerMap, outFile: 
     for i in range(len(programClipsList)):
         with open('encode.log', 'w') as encodeLogs, open('strip.log', 'w') as stripLogs:
             # encode
-            if byGroup:
+            if len(programClipsList) > 1:
                 currentOutFile = outFile.parent / f'{outFile.stem}_{i}.mp4'
             else:
                 currentOutFile = outFile

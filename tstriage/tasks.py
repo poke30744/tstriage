@@ -166,7 +166,7 @@ def Encode(item, encoder: str, epgStation: EPGStation):
 
     logger.info('Uploading processed files ...')
     for p in cache.glob('*.*'):
-        if p.stem == path.stem:
+        if path.stem in p.stem:
             if p.suffix == '.mp4':
                 CopyWithProgress(p, destination / p.name, epgStation=epgStation)
             elif p.suffix in ('.ass', '.srt'):
