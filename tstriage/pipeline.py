@@ -168,14 +168,20 @@ class MarkerMap(tsmarker.common.MarkerMap):
     def SplitClips(programClips: list, num: int) -> list[list]:
         splittedClips = []
         programsDuration = MarkerMap.GetClipsDuration(programClips)
+        meanDuration = programsDuration / num
         for i in range(num):
             clips = []
-            while programClips != []:
+            minDistance = meanDuration
+            while programClips != []:                
                 clips.append(programClips.pop(0))
-                if 0.95 < MarkerMap.GetClipsDuration(clips) / programsDuration * num < 1.05:
+                distance = abs(MarkerMap.GetClipsDuration(clips) - meanDuration)
+                if distance >= minDistance:
+                    programClips.insert(0, clips.pop())
                     break
-            clips += programClips
+                else:
+                    minDistance = distance
             splittedClips.append(clips)
+        splittedClips[-1] += programClips
         return splittedClips
 
 def EncodePipeline(inFile: Path, ptsMap: PtsMap, markerMap: MarkerMap, outFile: Path, byGroup: bool, splitNum: int, preset: str, cropdetect: bool, encoder: str):
