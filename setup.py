@@ -22,6 +22,11 @@ setuptools.setup(
     ],
     package_data={'': ['channels.yml']},
     include_package_data=True,
+    entry_points={
+        'console_scripts': [
+            'tstriage=tstriage.runner:main',
+        ],
+    },
     classifiers=[
         "Programming Language :: Python :: 3",
         "License :: OSI Approved :: MIT License",

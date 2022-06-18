@@ -151,7 +151,7 @@ class Runner:
             elif task == 'cleanup':
                 self.Cleanup()
 
-if __name__ == "__main__":
+def main():
     parser = argparse.ArgumentParser(description='Python script to triage TS files')
     parser.add_argument('--config', '-c', required=True, help='configuration file path')
     parser.add_argument('--task', '-t', required=True, nargs='+', choices=['categorize', 'list', 'analyze', 'mark', 'cut', 'confirm', 'encode', 'cleanup'], help='tasks to run')
@@ -174,3 +174,6 @@ if __name__ == "__main__":
         else:
             print(f'.{args.daemon}.', end="")
             time.sleep(args.daemon)
+
+if __name__ == "__main__":
+    main()
