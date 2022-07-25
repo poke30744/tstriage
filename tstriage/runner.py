@@ -38,6 +38,8 @@ class Runner:
             for keyword in reversed(sorted(self.epgStation.GetKeywords())):
                 if unicodedata.normalize('NFKC', keyword) in unicodedata.normalize('NFKC', path.stem):
                     epg = self.epgStation.GetEPG(path)
+                    if epg is None:
+                        break
                     with (Path(__file__).parent / 'event.yml').open(encoding='utf-8') as f:        
                         eventDesc = yaml.load(f, Loader=yaml.FullLoader)
                     genreDesc = eventDesc['Genre'][str(epg['genre1'])]
