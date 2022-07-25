@@ -11,7 +11,7 @@ pipeline {
         stage('Build') {
             agent {
                 docker {
-                    label '!windows'
+                    label 'linux'
                     image 'python:3.9.7'
                 }
             }
@@ -29,7 +29,7 @@ pipeline {
         stage('Test') {
             agent {
                 docker {
-                    label '!windows'
+                    label 'linux'
                     image 'python:3.9.7'
                     args '-e HOME=/var/jenkins_home_tmp --tmpfs /var/jenkins_home_tmp:exec'
                 }
@@ -45,7 +45,7 @@ pipeline {
             }
             agent {
                 docker {
-                    label '!windows'
+                    label 'linux'
                     image 'python:3.9.7'
                     args '-e HOME=/var/jenkins_home_tmp --tmpfs /var/jenkins_home_tmp:exec'
                 }
