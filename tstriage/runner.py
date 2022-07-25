@@ -2,6 +2,8 @@
 import argparse, json, time, os
 from pathlib import Path
 import logging
+import unicodedata
+import yaml
 from .common import WindowsInhibitor
 from .epgstation import EPGStation
 from .tasks import Analyze, Mark, Cut, Encode, Confirm, Cleanup
@@ -32,9 +34,19 @@ class Runner:
         for path in self.nas.RecordedFiles():
             if self.nas.HadBeenEncoded(path) or self.nas.HasActionItem(path):
                 continue
+            destination = self.nas.FindCategoryFolder(path)
+            if destination is None:
+                for keyword in reversed(sorted(self.epgStation.GetKeywords())):
+                    if unicodedata.normalize('NFKC', keyword) in unicodedata.normalize('NFKC', path.stem):
+                        epg = self.epgStation.GetEPG(path)
+                        with (Path(__file__).parent / 'event.yml').open(encoding='utf-8') as f:        
+                            eventDesc = yaml.load(f, Loader=yaml.FullLoader)
+                        genreDesc = eventDesc['Genre'][str(epg['genre1'])]
+                        destination = self.nas.destination / genreDesc / keyword
+                        break
             item = {
                 'path': str(path),
-                'destination': str(self.nas.FindCategoryFolder(path)),
+                'destination': str(destination),
             }
             self.nas.CreateActionItem(item, '.categorized')
     
@@ -42,7 +54,7 @@ class Runner:
         for path in self.nas.ActionItems('.categorized'):
             item = self.nas.LoadActionItem(path)
             encodeTo = item["destination"]
-            if encodeTo is not None:
+            if encodeTo != 'None':
                 with self.nas.FindTsTriageSettings(folder=Path(encodeTo)).open() as f:
                     settings = json.load(f)
                 path.unlink()

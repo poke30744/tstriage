@@ -20,7 +20,7 @@ setuptools.setup(
         'tsmarker',
         'PyYAML'
     ],
-    package_data={'': ['channels.yml']},
+    package_data={'': ['channels.yml', 'event.yml']},
     include_package_data=True,
     entry_points={
         'console_scripts': [

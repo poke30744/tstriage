@@ -1,3 +1,4 @@
+from genericpath import isfile
 import json, unicodedata
 from pathlib import Path
 from .epgstation import EPGStation
@@ -8,28 +9,30 @@ class NAS:
         self.destination = destination
         self.epgStation = epgStation
         self.tstriageFolder = recorded / '_tstriage'
-        self.categoryFoldersPath = self.tstriageFolder / 'categoryFolders.txt'
         self.encodedFilesPath = self.tstriageFolder / 'encodedFiles.txt'
 
     def __RefreshNAS(self, force: bool=False):
         if not force:
-            if self.categoryFoldersPath.exists() and self.encodedFilesPath.exists():
+            if self.encodedFilesPath.exists():
                 return
         if self.epgStation is not None:
             self.epgStation.BusyWait()
         if not self.tstriageFolder.exists():
             self.tstriageFolder.mkdir()
-        categoryFolders = []
-        encodedFiles = []
+        allVideoFiles = []
         for path in Path(self.destination).glob('**/*'):
-            if path.is_dir() and not path.name in ('_metadata', 'EPG', 'Subtitles'):
-                categoryFolders.append(path)
-            elif path.suffix == '.mp4' and (path.parent / '_metadata').exists():
-                encodedFiles.append(path.name)
-        # sort categoryFolders by length (long to short)
-        categoryFolders.sort(key=lambda item: (-len(str(item)), item))
-        with self.categoryFoldersPath.open('w') as f:
-            json.dump([str(i) for i in categoryFolders], f, ensure_ascii=False, indent=True)
+            if path.suffix in ('.mp4',) and (path.parent / '_metadata').exists():
+                allVideoFiles.append(path)
+        encodedFiles = []
+        for path in Path(self.recorded).glob('*'):
+            if path.is_file():
+                encoded = False
+                for p2 in allVideoFiles:
+                    if path.stem in p2.stem or p2.stem in path.stem:
+                        encoded = True
+                        break
+                if encoded:
+                    encodedFiles.append(p2.name)
         with self.encodedFilesPath.open('w') as f:
             json.dump(sorted([str(i) for i in encodedFiles]), f, ensure_ascii=False, indent=True)
     

@@ -75,7 +75,17 @@ class EPGStation:
                     break
             duration = epg['endAt'] - epg['startAt'] 
             print(f"{time.strftime('%Y-%m-%d %H:%M (%a)', time.localtime(epg['startAt'] / 1000))} ~ {round(duration / 1000 / 60)} mins", file=f)
-            return f.getvalue() 
+            return f.getvalue()
+
+    def GetKeywords(self) -> list[str]:
+        keywords = []
+        with urllib.request.urlopen(f'{self.url}/api/rules?offset=0&limit=99&type=normal&isHalfWidth=true') as response:
+            rules = json.load(response)
+            for rule in rules['rules']:
+                searchOption = rule['searchOption']
+                keyword = searchOption['keyword']
+                keywords.append(keyword)
+        return keywords
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='EPGStation client')
