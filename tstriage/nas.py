@@ -47,19 +47,6 @@ class NAS:
             encodedFiles.append(path.name)
             with self.encodedFilesPath.open('w') as f:
                 json.dump(encodedFiles, f, ensure_ascii=False, indent=True)
-        categoryFolders = self.CategoryFolders()
-        parent = str(path.parent)
-        if not parent in categoryFolders:
-            categoryFolders.append(parent)
-            # sort categoryFolders by length (long to short)
-            categoryFolders.sort(key=lambda item: (-len(item), item))
-            with self.categoryFoldersPath.open('w') as f:
-                json.dump(categoryFolders, f, ensure_ascii=False, indent=True)
-
-    def CategoryFolders(self) -> list[str]:
-        self.__RefreshNAS()
-        with self.categoryFoldersPath.open() as f:
-            return json.load(f)
 
     def RecordedFiles(self) -> list:
         return [ path for path in Path(self.recorded).glob('*') if path.suffix in ('.ts', '.m2ts') ]
@@ -69,13 +56,6 @@ class NAS:
             if path.stem in encodedFile:
                 return True
         return False
-    
-    def FindCategoryFolder(self, path) -> str:
-        for folder in self.CategoryFolders():
-            category = Path(folder).name
-            if unicodedata.normalize('NFKC', category) in unicodedata.normalize('NFKC', path.stem):
-                return folder
-        return None
     
     def ActionItems(self, suffix: str=None) -> list[Path]:
         actionItems = []

@@ -34,16 +34,15 @@ class Runner:
         for path in self.nas.RecordedFiles():
             if self.nas.HadBeenEncoded(path) or self.nas.HasActionItem(path):
                 continue
-            destination = self.nas.FindCategoryFolder(path)
-            if destination is None:
-                for keyword in reversed(sorted(self.epgStation.GetKeywords())):
-                    if unicodedata.normalize('NFKC', keyword) in unicodedata.normalize('NFKC', path.stem):
-                        epg = self.epgStation.GetEPG(path)
-                        with (Path(__file__).parent / 'event.yml').open(encoding='utf-8') as f:        
-                            eventDesc = yaml.load(f, Loader=yaml.FullLoader)
-                        genreDesc = eventDesc['Genre'][str(epg['genre1'])]
-                        destination = self.nas.destination / genreDesc / keyword
-                        break
+            destination = None
+            for keyword in reversed(sorted(self.epgStation.GetKeywords())):
+                if unicodedata.normalize('NFKC', keyword) in unicodedata.normalize('NFKC', path.stem):
+                    epg = self.epgStation.GetEPG(path)
+                    with (Path(__file__).parent / 'event.yml').open(encoding='utf-8') as f:        
+                        eventDesc = yaml.load(f, Loader=yaml.FullLoader)
+                    genreDesc = eventDesc['Genre'][str(epg['genre1'])]
+                    destination = self.nas.destination / genreDesc / keyword
+                    break
             item = {
                 'path': str(path),
                 'destination': str(destination),
