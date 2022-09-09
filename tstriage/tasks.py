@@ -171,6 +171,13 @@ def Encode(item, encoder: str, epgStation: EPGStation):
                 CopyWithProgress(p, destination / p.name, epgStation=epgStation)
             elif p.suffix in ('.ass', '.srt'):
                 CopyWithProgress(p, destination / 'Subtitles' / p.name, epgStation=epgStation)
+    
+    logger.info('Uploading triage file ...')
+    tstriageFolder = path.parent / '_tstriage'
+    for p in tstriageFolder.glob('*.*'):
+        if p.stem == path.stem:
+            CopyWithProgress(p, destination / '_metadata' / p.name)
+
     return outFile
 
 def Cleanup(item):
