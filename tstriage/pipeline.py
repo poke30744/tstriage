@@ -184,7 +184,7 @@ class MarkerMap(tsmarker.common.MarkerMap):
         splittedClips[-1] += programClips
         return splittedClips
 
-def EncodePipeline(inFile: Path, ptsMap: PtsMap, markerMap: MarkerMap, outFile: Path, byGroup: bool, splitNum: int, preset: str, cropdetect: bool, encoder: str):
+def EncodePipeline(inFile: Path, ptsMap: PtsMap, markerMap: MarkerMap, outFile: Path, byGroup: bool, splitNum: int, preset: str, cropdetect: bool, encoder: str, fixAudio: bool):
     programClips = markerMap.GetProgramClips()
     if splitNum > 1:
         programClipsList = [ MarkerMap.MergeNeighbors(clips) for clips in MarkerMap.SplitClips(programClips, splitNum) ]
@@ -231,7 +231,7 @@ def EncodePipeline(inFile: Path, ptsMap: PtsMap, markerMap: MarkerMap, outFile: 
             encodeTsP = subprocess.Popen(inputFile.EncodeTsCmd('-', currentOutFile, preset, encoder, cropInfo), stdin=subprocess.PIPE, stderr=encodeLogs)
             with encodeTsP :
                 # strip
-                stripTsP = subprocess.Popen(inputFile.StripTsCmd('-', '-'), stdin=subprocess.PIPE, stdout=encodeTsP.stdin, stderr=stripLogs)
+                stripTsP = subprocess.Popen(inputFile.StripTsCmd('-', '-', fixAudio=fixAudio), stdin=subprocess.PIPE, stdout=encodeTsP.stdin, stderr=stripLogs)
                 # subtitles
                 startupinfo = subprocess.STARTUPINFO(wShowWindow=6, dwFlags=subprocess.STARTF_USESHOWWINDOW) if hasattr(subprocess, 'STARTUPINFO') else None
                 creationflags = subprocess.CREATE_NEW_CONSOLE if hasattr(subprocess, 'CREATE_NEW_CONSOLE') else 0
