@@ -184,7 +184,7 @@ class MarkerMap(tsmarker.common.MarkerMap):
         splittedClips[-1] += programClips
         return splittedClips
 
-def EncodePipeline(inFile: Path, ptsMap: PtsMap, markerMap: MarkerMap, outFile: Path, byGroup: bool, splitNum: int, preset: str, cropdetect: bool, encoder: str, fixAudio: bool):
+def EncodePipeline(inFile: Path, ptsMap: PtsMap, markerMap: MarkerMap, outFile: Path, byGroup: bool, splitNum: int, preset: str, cropdetect: bool, encoder: str, fixAudio: bool, noStrip: bool):
     programClips = markerMap.GetProgramClips()
     if splitNum > 1:
         programClipsList = [ MarkerMap.MergeNeighbors(clips) for clips in MarkerMap.SplitClips(programClips, splitNum) ]
@@ -229,9 +229,10 @@ def EncodePipeline(inFile: Path, ptsMap: PtsMap, markerMap: MarkerMap, outFile: 
             if currentOutFile.exists():
                 currentOutFile.unlink()
             encodeTsP = subprocess.Popen(inputFile.EncodeTsCmd('-', currentOutFile, preset, encoder, cropInfo), stdin=subprocess.PIPE, stderr=encodeLogs)
-            with encodeTsP :
-                # strip
-                stripTsP = subprocess.Popen(inputFile.StripTsCmd('-', '-', fixAudio=fixAudio), stdin=subprocess.PIPE, stdout=encodeTsP.stdin, stderr=stripLogs)
+            with encodeTsP:
+                if not noStrip:
+                    # strip
+                    stripTsP = subprocess.Popen(inputFile.StripTsCmd('-', '-', fixAudio=fixAudio), stdin=subprocess.PIPE, stdout=encodeTsP.stdin, stderr=stripLogs)
                 # subtitles
                 startupinfo = subprocess.STARTUPINFO(wShowWindow=6, dwFlags=subprocess.STARTF_USESHOWWINDOW) if hasattr(subprocess, 'STARTUPINFO') else None
                 creationflags = subprocess.CREATE_NEW_CONSOLE if hasattr(subprocess, 'CREATE_NEW_CONSOLE') else 0
@@ -241,11 +242,19 @@ def EncodePipeline(inFile: Path, ptsMap: PtsMap, markerMap: MarkerMap, outFile: 
                     startupinfo=startupinfo,
                     creationflags=creationflags,
                     shell=True)
-                with stripTsP, subtitlesP:
-                    # extract (data pump)
-                    teeFile = Tee(outPipes=[stripTsP.stdin, subtitlesP.stdin], couldBeBroken=[subtitlesP.stdin])
-                    clips = programClipsList[i]
-                    ptsMap.ExtractClipsPipe(inFile, clips, teeFile, quiet=False)
+                if not noStrip:
+                    with stripTsP, subtitlesP:
+                        # extract (data pump)
+                        teeFile = Tee(outPipes=[stripTsP.stdin, subtitlesP.stdin], couldBeBroken=[subtitlesP.stdin])
+                        clips = programClipsList[i]
+                        ptsMap.ExtractClipsPipe(inFile, clips, teeFile, quiet=False)
+                else:
+                    with subtitlesP:
+                        # extract (data pump)
+                        teeFile = Tee(outPipes=[encodeTsP.stdin, subtitlesP.stdin], couldBeBroken=[subtitlesP.stdin])
+                        clips = programClipsList[i]
+                        ptsMap.ExtractClipsPipe(inFile, clips, teeFile, quiet=False)
+                    
             logger.info('Trying to fix issues in subtitles ...')
             for suffix in ('.ass', '.srt'):
                 subPath = currentOutFile.with_suffix(suffix)

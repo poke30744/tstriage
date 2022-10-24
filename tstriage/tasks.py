@@ -145,6 +145,7 @@ def Encode(item, encoder: str, epgStation: EPGStation):
     preset = item['encoder']['preset']
     cropdetect = item['encoder'].get('cropdetect')
     fixAudio = item['encoder'].get('fixaudio')
+    noStrip = item['encoder'].get('nostrip')
     ptsMap = PtsMap(destination / '_metadata' / path.with_suffix('.ptsmap').name)
     markerMap = MarkerMap(destination / '_metadata' /  path.with_suffix('.markermap').name, ptsMap)
 
@@ -164,7 +165,8 @@ def Encode(item, encoder: str, epgStation: EPGStation):
         preset=preset,
         cropdetect=cropdetect,
         encoder=encoder,
-        fixAudio=fixAudio)
+        fixAudio=fixAudio,
+        noStrip=noStrip)
 
     logger.info('Uploading processed files ...')
     for p in cache.glob('*.*'):
