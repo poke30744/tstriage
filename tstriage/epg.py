@@ -57,8 +57,12 @@ class EPG:
         return self.info
 
     def ServiceId(self) -> str:
-        return self.inputFile.GetInfo()['serviceId']
-    
+        try:
+            return self.__serviceId
+        except AttributeError:
+            self.__serviceId = self.inputFile.GetInfo()['serviceId']
+            return self.__serviceId
+
     def Channel(self) -> str:
         if self.channels is None:
             with (Path(__file__).parent / 'channels.yml').open(encoding='utf-8') as f:        
