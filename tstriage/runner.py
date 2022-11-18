@@ -4,6 +4,7 @@ from pathlib import Path
 import logging
 import unicodedata
 import yaml
+from tqdm import tqdm
 from .common import WindowsInhibitor
 from .epgstation import EPGStation
 from .tasks import Analyze, Mark, Cut, Encode, Confirm, Cleanup
@@ -31,7 +32,7 @@ class Runner:
             epgStation=self.epgStation)
 
     def Categorize(self):
-        for path in self.nas.RecordedFiles():
+        for path in tqdm(self.nas.RecordedFiles(), desc="Categorizing"):
             if self.nas.HadBeenEncoded(path) or self.nas.HasActionItem(path):
                 continue
             destination = None

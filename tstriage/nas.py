@@ -1,7 +1,8 @@
 from genericpath import isfile
-import json, unicodedata
+import json
 from pathlib import Path
 from .epgstation import EPGStation
+from tqdm import tqdm
 
 class NAS:
     def __init__(self, recorded: Path, destination: Path, epgStation: EPGStation=None) -> None:
@@ -20,11 +21,11 @@ class NAS:
         if not self.tstriageFolder.exists():
             self.tstriageFolder.mkdir()
         allVideoFiles = []
-        for path in Path(self.destination).glob('**/*'):
+        for path in tqdm(Path(self.destination).glob('**/*'), desc="Loading encoded files"):
             if path.suffix in ('.mp4',) and (path.parent / '_metadata').exists():
                 allVideoFiles.append(path)
         encodedFiles = []
-        for path in Path(self.recorded).glob('*'):
+        for path in tqdm(Path(self.recorded).glob('*'), desc='loading recorded files'):
             if path.is_file():
                 encoded = False
                 for p2 in allVideoFiles:
