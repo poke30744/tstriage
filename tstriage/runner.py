@@ -167,7 +167,7 @@ class Runner:
 
 def main():
     parser = argparse.ArgumentParser(description='Python script to triage TS files')
-    parser.add_argument('--config', '-c', required=True, help='configuration file path')
+    parser.add_argument('--config', '-c', default='tstriage.config.yml', help='configuration file path')
     parser.add_argument('--task', '-t', required=True, nargs='+', choices=['categorize', 'list', 'analyze', 'mark', 'cut', 'confirm', 'encode', 'cleanup'], help='tasks to run')
     parser.add_argument('--daemon', '-d', type=int, help='keep running')
 
@@ -177,7 +177,7 @@ def main():
 
     configurationPath = Path(args.config)
     with configurationPath.open(encoding='utf-8') as f:
-        configuration = json.load(f)
+        configuration = yaml.safe_load(f)
     
     runner = Runner(configuration)
 

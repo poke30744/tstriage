@@ -17,8 +17,6 @@
             "request": "launch",
             "module": "tstriage.runner",
             "args": [
-                "-c",
-                "triage.config.json",
                 "-t",
                 "categorize"
             ]
@@ -29,8 +27,6 @@
             "request": "launch",
             "module": "tstriage.runner",
             "args": [
-                "-c",
-                "triage.config.json",
                 "-t",
                 "list"
             ]
@@ -42,8 +38,6 @@
             "justMyCode": false,
             "module": "tstriage.runner",
             "args": [
-                "-c",
-                "triage.config.json",
                 "-t",
                 "analyze"
             ]
@@ -55,8 +49,6 @@
             "justMyCode": false,
             "module": "tstriage.runner",
             "args": [
-                "-c",
-                "triage.config.json",
                 "-t",
                 "mark"
             ]
@@ -68,8 +60,6 @@
             "justMyCode": false,
             "module": "tstriage.runner",
             "args": [
-                "-c",
-                "triage.config.json",
                 "-t",
                 "cut"
             ]
@@ -81,8 +71,6 @@
             "justMyCode": false,
             "module": "tstriage.runner",
             "args": [
-                "-c",
-                "triage.config.json",
                 "-t",
                 "confirm"
             ]
@@ -94,8 +82,6 @@
             "justMyCode": false,
             "module": "tstriage.runner",
             "args": [
-                "-c",
-                "triage.config.json",
                 "-t",
                 "encode"
             ]
@@ -107,8 +93,6 @@
             "justMyCode": false,
             "module": "tstriage.runner",
             "args": [
-                "-c",
-                "triage.config.json",
                 "-t",
                 "cleanup"
             ]
