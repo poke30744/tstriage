@@ -17,6 +17,7 @@ pipeline {
             }
             steps {
                 sh '''
+                    git clean -fdx
                     python --version
                     pwd
                     df -h
