@@ -1,6 +1,7 @@
 import logging, subprocess, argparse, os, tempfile
 from pathlib import Path
 import pysubs2
+import yaml
 from tscutter import ffmpeg
 from tsmarker.pipeline import PtsMap, ExtractLogoPipeline, CropDetectPipeline
 import tsmarker.common
@@ -231,7 +232,6 @@ if __name__ == "__main__":
     subparser.add_argument('--bygroup', action='store_true', help='extract into groups')
     subparser.add_argument('--preset', default='drama', help='encoder preset string')
     subparser.add_argument('--cropdetect', '-c', action='store_true', help='detect and crop still area')
-    subparser.add_argument('--encoder', default='nvenc_h264', help='FFmpeg encoder name')
     subparser.add_argument('--notag', action='store_true', help="don't add tag to output filename")
 
     args = parser.parse_args()
@@ -241,10 +241,14 @@ if __name__ == "__main__":
     os.environ['PATH'] = f'{os.environ["PATH"]};C:\\Software\\Caption2Ass'
 
     if args.command == 'encode':
+        with Path("tstriage.config.yml").open(encoding='utf-8') as f:
+            configuration = yaml.safe_load(f)
+            encoder = configuration['Encoder']
+            preset = configuration['Presets'][args.preset]
         inFile = Path(args.input)
         ptsMap = PtsMap(inFile.parent / '_metadata' / (inFile.stem + '.ptsmap'))
         markerMap = MarkerMap(inFile.parent / '_metadata' / (inFile.stem + '.markermap'), ptsMap)
-        outputPath = inFile.with_suffix('.mp4') if args.notag else inFile.parent / f'{inFile.stem}_({args.preset}_{args.encoder}_crf{presets[args.preset]["crf"]}).mp4'
+        outputPath = inFile.with_suffix('.mp4') if args.notag else inFile.parent / f'{inFile.stem}_({args.preset}_{encoder}_crf{preset["crf"]}).mp4'
         EncodePipeline(
             inFile=inFile,
             ptsMap=ptsMap,
@@ -252,6 +256,8 @@ if __name__ == "__main__":
             outFile=outputPath,
             byGroup=args.bygroup,
             splitNum=1,
-            preset=args.preset,
+            preset=preset,
             cropdetect=args.cropdetect,
-            encoder=args.encoder)
+            encoder=encoder,
+            fixAudio=False,
+            noStrip=False)
