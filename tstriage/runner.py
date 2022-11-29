@@ -21,10 +21,8 @@ class Runner:
             for key in configuration['Path']:
                 pathToAdd = configuration["Path"][key]
                 os.environ['PATH'] = f'{os.environ["PATH"]};{pathToAdd}'
-        if 'Encoder' in configuration:
-            self.encoder = configuration['Encoder']
-        else:
-            self.encoder = 'h264'
+        self.encoder = configuration['Encoder']
+        self.presets = configuration['Presets']
         self.epgStation = EPGStation(url=configuration['EPGStation'], cache=configuration['Cache'], recorded=configuration['Uncategoried']) if 'EPGStation' in configuration else None
         self.nas = NAS(
             recorded=Path(self.configuration['Uncategoried']),
@@ -116,14 +114,14 @@ class Runner:
         for path in self.nas.ActionItems('.toencode'):
             item = self.nas.LoadActionItem(path)
             try:
-                encodedFile = Encode(item=item, encoder=self.encoder, epgStation=self.epgStation)
+                encodedFile = Encode(item=item, encoder=self.encoder, presets=self.presets, epgStation=self.epgStation)
                 path.unlink()
                 self.nas.CreateActionItem(item, '.toconfirm')
                 self.nas.AddEncodedFile(encodedFile)
             except KeyboardInterrupt:
                 raise
             except:
-                logger.exception(f'in marking "{path}":')
+                logger.exception(f'in encoding "{path}":')
                 path.rename(path.with_suffix('.error'))
 
     def Confirm(self):

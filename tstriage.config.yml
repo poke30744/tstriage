@@ -6,3 +6,29 @@ Path:
   TsSplitter: C:\Software\TsSplitter
   Caption2Ass: C:\Software\Caption2Ass
 Encoder: h264_nvenc
+Presets:
+  drama:
+    videoFilter: bwdif=0
+    bitrate: 2500k
+    maxRate: 5000k
+    crf: 19
+  drama720p:
+    videoFilter: bwdif=0,scale=1280:720
+    bitrate: 1500k
+    maxRate: 3000k
+    crf: 19
+  anime:
+    videoFilter: pullup,fps=24000/1001
+    bitrate: 2500k
+    maxRate: 5000k
+    crf: 19
+  anime720p:
+    videoFilter: pullup,fps=24000/1001,scale=1280:720
+    bitrate: 1500k
+    maxRate: 3000k
+    crf: 19
+  anime480p:
+    videoFilter: pullup,fps=24000/1001,scale=852:480
+    bitrate: 750k
+    maxRate: 1500k
+    crf: 19

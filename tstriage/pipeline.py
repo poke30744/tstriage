@@ -7,45 +7,6 @@ import tsmarker.common
 
 logger = logging.getLogger('tstriage.pipeline')
 
-presets = {
-    'drama': {
-        'videoFilter': 'bwdif=0',
-        'bitrate': '2500k',
-        'maxRate': '5000k',
-        'crf': '19',
-    },
-    'drama720p': {
-        'videoFilter': 'bwdif=0,scale=1280:720',
-        'bitrate': '1500k',
-        'maxRate': '3000k',
-        'crf': '19',
-    },
-    'anime': {
-        'videoFilter': 'pullup,fps=24000/1001',
-        'bitrate': '2500k',
-        'maxRate': '5000k',
-        'crf': '19',
-    },
-    'anime720p': {
-        'videoFilter': 'pullup,fps=24000/1001,scale=1280:720',
-        'bitrate': '1500k',
-        'maxRate': '3000k',
-        'crf': '19',
-    },
-    'anime480p': {
-        'videoFilter': 'pullup,fps=24000/1001,scale=852:480',
-        'bitrate': '750k',
-        'maxRate': '1500k',
-        'crf': '19',
-    },
-    'bluedvd': {
-        'videoFilter': '',
-        'bitrate': '2500k',
-        'maxRate': '5000k',
-        'crf': '19',
-    },
-}
-
 class InputFile(ffmpeg.InputFile):
     def StripTsCmd(self, inFile, outFile, audioLanguages=['jpn'], fixAudio=False, noMap=False):
         args = [
@@ -68,7 +29,6 @@ class InputFile(ffmpeg.InputFile):
         return args
 
     def EncodeTsCmd(self, inPath, outPath, preset, encoder, crop=None):
-        preset = presets[preset]
         videoFilter = preset['videoFilter']
         if crop:    
             filters = preset['videoFilter'].split(',')
@@ -86,11 +46,11 @@ class InputFile(ffmpeg.InputFile):
                 filters.append(f'scale={scale_w}:{scale_h}')
             videoFilter = ','.join(filters)
         if '_nvenc' in encoder:
-            videoCodec = [ '-c:v', encoder, '-rc:v', 'vbr_hq', '-cq:v', preset['crf'], '-b:v', preset['bitrate'], '-maxrate:v', preset['maxRate'], '-profile:v', 'high' ]
+            videoCodec = [ '-c:v', encoder, '-rc:v', 'vbr_hq', '-cq:v', str(preset['crf']), '-b:v', preset['bitrate'], '-maxrate:v', preset['maxRate'], '-profile:v', 'high' ]
         elif '_videotoolbox' in encoder:
             videoCodec = [ '-c:v', encoder, '-b:v', preset['bitrate'], '-maxrate:v',  preset['maxRate'] ]
         else:
-            videoCodec = [ '-c:v', encoder, '-crf', preset['crf'] ]
+            videoCodec = [ '-c:v', encoder, '-crf', str(preset['crf']) ]
         args = [
             self.ffmpeg, '-hide_banner', '-y',
             '-i', inPath
@@ -184,7 +144,7 @@ class MarkerMap(tsmarker.common.MarkerMap):
         splittedClips[-1] += programClips
         return splittedClips
 
-def EncodePipeline(inFile: Path, ptsMap: PtsMap, markerMap: MarkerMap, outFile: Path, byGroup: bool, splitNum: int, preset: str, cropdetect: bool, encoder: str, fixAudio: bool, noStrip: bool):
+def EncodePipeline(inFile: Path, ptsMap: PtsMap, markerMap: MarkerMap, outFile: Path, byGroup: bool, splitNum: int, preset: dict, cropdetect: bool, encoder: str, fixAudio: bool, noStrip: bool):
     programClips = markerMap.GetProgramClips()
     if splitNum > 1:
         programClipsList = [ MarkerMap.MergeNeighbors(clips) for clips in MarkerMap.SplitClips(programClips, splitNum) ]

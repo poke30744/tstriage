@@ -137,12 +137,12 @@ def Confirm(item):
         logger.warning("*** Re-encoding is needed! ***")
     return isReEncodingNeeded
 
-def Encode(item, encoder: str, epgStation: EPGStation):
+def Encode(item, encoder: str, presets: dict, epgStation: EPGStation):
     path = Path(item['path'])
     destination = Path(item['destination'])
     byGroup = item.get('encoder', {}).get('bygroup', False)
     splitNum = item.get('encoder', {}).get('split', 1)
-    preset = item['encoder']['preset']
+    presetName = item['encoder']['preset']
     cropdetect = item['encoder'].get('cropdetect')
     fixAudio = item['encoder'].get('fixaudio')
     noStrip = item['encoder'].get('nostrip')
@@ -162,7 +162,7 @@ def Encode(item, encoder: str, epgStation: EPGStation):
         outFile=outFile,
         byGroup=byGroup,
         splitNum=splitNum,
-        preset=preset,
+        preset=presets[presetName],
         cropdetect=cropdetect,
         encoder=encoder,
         fixAudio=fixAudio,
