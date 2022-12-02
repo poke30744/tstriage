@@ -1,4 +1,4 @@
-import shutil, logging
+import shutil, logging, subprocess, os
 from pathlib import Path
 from tqdm import tqdm
 from .epgstation import EPGStation
@@ -28,6 +28,13 @@ class WindowsInhibitor:
     
     def __exit__(self, exc_type, exc_value, traceback):
         WindowsInhibitor.uninhibit()
+
+def CopyWithProgress2(srcPath: Path, dstPath: Path):
+    completedProcess = subprocess.run(['robocopy', '/z', '/copy:DT', '/NJH', '/NJS', '/NDL', srcPath.parent, dstPath.parent, srcPath.name])
+    if completedProcess.returncode >= 8:
+        completedProcess.check_returncode()
+    if srcPath.name != dstPath.name:
+        shutil.move(dstPath.parent / srcPath.name, dstPath)
 
 def CopyWithProgress(srcPath: Path, dstPath: Path, force: bool=False, epgStation: EPGStation=None):
     if not srcPath.exists():

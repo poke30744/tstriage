@@ -5,7 +5,6 @@ import logging
 import unicodedata
 import yaml
 from tqdm import tqdm
-from .common import WindowsInhibitor
 from .epgstation import EPGStation
 from .tasks import Analyze, Mark, Cut, Encode, Confirm, Cleanup
 from .nas import NAS
@@ -101,7 +100,7 @@ class Runner:
         for path in self.nas.ActionItems('.tocut'):
             item = self.nas.LoadActionItem(path)
             try:
-                Cut(item=item, epgStation=self.epgStation)
+                Cut(item=item)
                 path.unlink()
                 self.nas.CreateActionItem(item, '.toencode')
             except KeyboardInterrupt:
@@ -114,7 +113,7 @@ class Runner:
         for path in self.nas.ActionItems('.toencode'):
             item = self.nas.LoadActionItem(path)
             try:
-                encodedFile = Encode(item=item, encoder=self.encoder, presets=self.presets, epgStation=self.epgStation)
+                encodedFile = Encode(item=item, encoder=self.encoder, presets=self.presets)
                 path.unlink()
                 self.nas.CreateActionItem(item, '.toconfirm')
                 self.nas.AddEncodedFile(encodedFile)

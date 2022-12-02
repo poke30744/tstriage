@@ -5,7 +5,7 @@ from tscutter.analyze import AnalyzeVideo
 import tsmarker.common
 from tsmarker import subtitles, logo, clipinfo, ensemble, groundtruth
 from tsmarker.pipeline import PtsMap, ExtractLogoPipeline
-from .common import CopyWithProgress
+from .common import CopyWithProgress2
 from .epg import EPG
 from .epgstation import EPGStation
 from .pipeline import MarkerMap, EncodePipeline
@@ -19,7 +19,7 @@ def Analyze(item, epgStation: EPGStation):
 
     logger.info('Copying TS file to working folder ...')
     workingPath = cache / path.name
-    CopyWithProgress(path, workingPath, epgStation=epgStation)
+    CopyWithProgress2(path, workingPath)
 
     logger.info('Analyzing to split ...')
     indexPath = destination / '_metadata' / workingPath.with_suffix('.ptsmap').name
@@ -31,7 +31,7 @@ def Analyze(item, epgStation: EPGStation):
     logger.info('Extracting EPG ...')
     EPG.Dump(workingPath)
     epgPath = workingPath.with_suffix('.epg')
-    CopyWithProgress(epgPath, destination / '_metadata' / epgPath.name)
+    CopyWithProgress2(epgPath, destination / '_metadata' / epgPath.name)
     epg = EPG(epgPath, inputFile,  epgStation.GetChannels())
     epg.OutputDesc(destination / workingPath.with_suffix('.yaml').name)
     epgPath.unlink()
@@ -39,7 +39,7 @@ def Analyze(item, epgStation: EPGStation):
     logger.info('Extracting subtitles ...')
     for sub in subtitles.Extract(workingPath):
         if sub.suffix == '.ass':
-             CopyWithProgress(sub, destination / '_metadata' / sub.with_suffix('.ass.original').name)
+             CopyWithProgress2(sub, destination / '_metadata' / sub.with_suffix('.ass.original').name)
         sub.unlink()
     
     info = inputFile.GetInfo()
@@ -55,7 +55,7 @@ def Mark(item, epgStation: EPGStation):
     logger.info('Copying TS file to working folder ...')
     workingPath = cache / path.name
     inputFile = InputFile(workingPath)
-    CopyWithProgress(path, workingPath, epgStation=epgStation)
+    CopyWithProgress2(path, workingPath)
     
     logger.info('Marking ...')
     indexPath = destination / '_metadata' / workingPath.with_suffix('.ptsmap').name
@@ -99,14 +99,14 @@ def Mark(item, epgStation: EPGStation):
             logger.warn(f'No metadata is found in {metadataPath}!')
             byEnsemble = False
 
-def Cut(item, epgStation: EPGStation):
+def Cut(item):
     path = Path(item['path'])
     cache = Path(item['cache']).expanduser()
     destination = Path(item['destination'])
 
     logger.info('Copying TS file to working folder ...')
     workingPath = cache / path.name
-    CopyWithProgress(path, workingPath, epgStation=epgStation)
+    CopyWithProgress2(path, workingPath)
     
     logger.info('Cutting ...')
     indexPath = destination / '_metadata' / workingPath.with_suffix('.ptsmap').name
@@ -137,7 +137,7 @@ def Confirm(item):
         logger.warning("*** Re-encoding is needed! ***")
     return isReEncodingNeeded
 
-def Encode(item, encoder: str, presets: dict, epgStation: EPGStation):
+def Encode(item, encoder: str, presets: dict):
     path = Path(item['path'])
     destination = Path(item['destination'])
     byGroup = item.get('encoder', {}).get('bygroup', False)
@@ -152,7 +152,7 @@ def Encode(item, encoder: str, presets: dict, epgStation: EPGStation):
     logger.info('Copying TS file to working folder ...')
     cache = Path(item['cache']).expanduser()
     workingPath = cache / path.name
-    CopyWithProgress(path, workingPath, epgStation=epgStation)
+    CopyWithProgress2(path, workingPath)
     
     outFile = workingPath.with_suffix('.mp4')
     EncodePipeline(
@@ -172,15 +172,15 @@ def Encode(item, encoder: str, presets: dict, epgStation: EPGStation):
     for p in cache.glob('*.*'):
         if path.stem in p.stem:
             if p.suffix == '.mp4':
-                CopyWithProgress(p, destination / p.name, epgStation=epgStation)
+                CopyWithProgress2(p, destination / p.name)
             elif p.suffix in ('.ass', '.srt'):
-                CopyWithProgress(p, destination / 'Subtitles' / p.name, epgStation=epgStation)
+                CopyWithProgress2(p, destination / 'Subtitles' / p.name)
     
     logger.info('Uploading triage file ...')
     tstriageFolder = path.parent / '_tstriage'
     for p in tstriageFolder.glob('*.*'):
         if p.stem == path.stem:
-            CopyWithProgress(p, destination / '_metadata' / p.name)
+            CopyWithProgress2(p, destination / '_metadata' / p.name)
 
     return outFile
 
