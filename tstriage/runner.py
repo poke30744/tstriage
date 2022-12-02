@@ -148,16 +148,13 @@ class Runner:
             elif task == 'list':
                 self.List()
             elif task == 'analyze':
-                with WindowsInhibitor():
-                    self.Analyze()
+                self.Analyze()
             elif task == 'mark':
-                with WindowsInhibitor():
-                    self.Mark()
+                self.Mark()
             elif task == 'cut':
                     self.Cut()
             elif task == 'encode':
-                with WindowsInhibitor():
-                    self.Encode()
+                self.Encode()
             elif task == 'confirm':
                 self.Confirm()
             elif task == 'cleanup':
