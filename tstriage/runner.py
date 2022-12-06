@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-import argparse, json, time, os
+import argparse, json, os
 from pathlib import Path
 import logging
 import unicodedata
@@ -163,7 +163,6 @@ def main():
     parser = argparse.ArgumentParser(description='Python script to triage TS files')
     parser.add_argument('--config', '-c', default='tstriage.config.yml', help='configuration file path')
     parser.add_argument('--task', '-t', required=True, nargs='+', choices=['categorize', 'list', 'analyze', 'mark', 'cut', 'confirm', 'encode', 'cleanup'], help='tasks to run')
-    parser.add_argument('--daemon', '-d', type=int, help='keep running')
 
     args = parser.parse_args()
 
@@ -174,14 +173,7 @@ def main():
         configuration = yaml.safe_load(f)
     
     runner = Runner(configuration)
-
-    while True:
-        runner.Run(args.task)
-        if args.daemon is None:
-            break
-        else:
-            print(f'.{args.daemon}.', end="")
-            time.sleep(args.daemon)
+    runner.Run(args.task)
 
 if __name__ == "__main__":
     main()
