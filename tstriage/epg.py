@@ -15,7 +15,7 @@ def represent_str(dumper, instance):
 yaml.add_representer(str, represent_str)
 
 class EPG:
-    def Dump(videoPath):
+    def Dump(videoPath, quiet: bool=False):
         if os.name == 'nt':
             CheckExtenralCommand('mirakurun-epgdump.cmd')
         else:
@@ -26,11 +26,14 @@ class EPG:
         videoPath = Path(videoPath)
         epgPath = videoPath.with_suffix('.epg')
         if os.name == 'nt':
-            pipeObj = subprocess.Popen(f'mirakurun-epgdump.cmd "{videoPath}" "{epgPath}"')
+            dumpCmd = f'mirakurun-epgdump.cmd "{videoPath}" "{epgPath}"'
         else:
-            pipeObj = subprocess.Popen(['mirakurun-epgdump', videoPath, epgPath])
-        pipeObj.wait()
-        
+            dumpCmd = ['mirakurun-epgdump', videoPath, epgPath]
+        if quiet:
+            subprocess.run(dumpCmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        else:
+            subprocess.run(dumpCmd)
+
     def __init__(self, path: Path, inputFile: InputFile, channels: dict=None) -> None:
         self.path = path
         self.inputFile = inputFile

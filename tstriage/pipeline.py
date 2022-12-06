@@ -145,7 +145,7 @@ class MarkerMap(tsmarker.common.MarkerMap):
         splittedClips[-1] += programClips
         return splittedClips
 
-def EncodePipeline(inFile: Path, ptsMap: PtsMap, markerMap: MarkerMap, outFile: Path, byGroup: bool, splitNum: int, preset: dict, cropdetect: bool, encoder: str, fixAudio: bool, noStrip: bool):
+def EncodePipeline(inFile: Path, ptsMap: PtsMap, markerMap: MarkerMap, outFile: Path, byGroup: bool, splitNum: int, preset: dict, cropdetect: bool, encoder: str, fixAudio: bool, noStrip: bool, quiet=False):
     programClips = markerMap.GetProgramClips()
     if splitNum > 1:
         programClipsList = [ MarkerMap.MergeNeighbors(clips) for clips in MarkerMap.SplitClips(programClips, splitNum) ]
@@ -163,7 +163,7 @@ def EncodePipeline(inFile: Path, ptsMap: PtsMap, markerMap: MarkerMap, outFile: 
     if cropdetect:
         with tempfile.TemporaryDirectory(prefix='EncodePipeline_') as tmpFolder:
             logoPath = Path(tmpFolder) / (inFile.stem + '_logo.png')
-            ExtractLogoPipeline(inFile, ptsMap, logoPath, maxTimeToExtract=10, removeBoarder=False)
+            ExtractLogoPipeline(inFile, ptsMap, logoPath, maxTimeToExtract=10, removeBoarder=False, quiet=quiet)
             cropInfo = CropDetectPipeline(logoPath)
             if cropInfo is not None:
                 # double check if cropping is really needed
@@ -208,13 +208,13 @@ def EncodePipeline(inFile: Path, ptsMap: PtsMap, markerMap: MarkerMap, outFile: 
                         # extract (data pump)
                         teeFile = Tee(outPipes=[stripTsP.stdin, subtitlesP.stdin], couldBeBroken=[subtitlesP.stdin])
                         clips = programClipsList[i]
-                        ptsMap.ExtractClipsPipe(inFile, clips, teeFile, quiet=False)
+                        ptsMap.ExtractClipsPipe(inFile, clips, teeFile, quiet=quiet)
                 else:
                     with subtitlesP:
                         # extract (data pump)
                         teeFile = Tee(outPipes=[encodeTsP.stdin, subtitlesP.stdin], couldBeBroken=[subtitlesP.stdin])
                         clips = programClipsList[i]
-                        ptsMap.ExtractClipsPipe(inFile, clips, teeFile, quiet=False)
+                        ptsMap.ExtractClipsPipe(inFile, clips, teeFile, quiet=quiet)
                     
             logger.info('Trying to fix issues in subtitles ...')
             for suffix in ('.ass', '.srt'):

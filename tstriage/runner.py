@@ -12,8 +12,9 @@ from .nas import NAS
 logger = logging.getLogger('tstriage.runner')
 
 class Runner:
-    def __init__(self, configuration):
+    def __init__(self, configuration, quiet: bool):
         self.configuration = configuration
+        self.quiet = quiet
         self.cache = Path(configuration['Cache']).expanduser()
         self.cache.mkdir(parents=True, exist_ok=True)
         if 'Path' in configuration:
@@ -29,7 +30,7 @@ class Runner:
             epgStation=self.epgStation)
 
     def Categorize(self):
-        for path in tqdm(self.nas.RecordedFiles(), desc="Categorizing"):
+        for path in tqdm(self.nas.RecordedFiles(), desc="Categorizing", disable=self.quiet):
             if self.nas.HadBeenEncoded(path) or self.nas.HasActionItem(path):
                 continue
             destination = None
@@ -74,7 +75,7 @@ class Runner:
         for path in self.nas.ActionItems('.toanalyze'):
             item = self.nas.LoadActionItem(path)
             try:
-                Analyze(item=item, epgStation=self.epgStation)
+                Analyze(item=item, epgStation=self.epgStation, quiet=self.quiet)
                 path.unlink()
                 self.nas.CreateActionItem(item, '.tomark')
             except KeyboardInterrupt:
@@ -87,7 +88,7 @@ class Runner:
         for path in self.nas.ActionItems('.tomark'):
             item = self.nas.LoadActionItem(path)
             try:
-                Mark(item=item, epgStation=self.epgStation)
+                Mark(item=item, epgStation=self.epgStation, quiet=self.quiet)
                 path.unlink()
                 self.nas.CreateActionItem(item, '.tocut')
             except KeyboardInterrupt:
@@ -100,7 +101,7 @@ class Runner:
         for path in self.nas.ActionItems('.tocut'):
             item = self.nas.LoadActionItem(path)
             try:
-                Cut(item=item)
+                Cut(item=item, quiet=self.quiet)
                 path.unlink()
                 self.nas.CreateActionItem(item, '.toencode')
             except KeyboardInterrupt:
@@ -113,7 +114,7 @@ class Runner:
         for path in self.nas.ActionItems('.toencode'):
             item = self.nas.LoadActionItem(path)
             try:
-                encodedFile = Encode(item=item, encoder=self.encoder, presets=self.presets)
+                encodedFile = Encode(item=item, encoder=self.encoder, presets=self.presets, quiet=self.quiet)
                 path.unlink()
                 self.nas.CreateActionItem(item, '.toconfirm')
                 self.nas.AddEncodedFile(encodedFile)
@@ -162,6 +163,7 @@ class Runner:
 def main():
     parser = argparse.ArgumentParser(description='Python script to triage TS files')
     parser.add_argument('--config', '-c', default='tstriage.config.yml', help='configuration file path')
+    parser.add_argument('--quiet', '-q', action='store_true', default=False, help='disable progress bar')
     parser.add_argument('--task', '-t', required=True, nargs='+', choices=['categorize', 'list', 'analyze', 'mark', 'cut', 'confirm', 'encode', 'cleanup'], help='tasks to run')
 
     args = parser.parse_args()
@@ -172,7 +174,7 @@ def main():
     with configurationPath.open(encoding='utf-8') as f:
         configuration = yaml.safe_load(f)
     
-    runner = Runner(configuration)
+    runner = Runner(configuration, quiet=args.quiet)
     runner.Run(args.task)
 
 if __name__ == "__main__":
