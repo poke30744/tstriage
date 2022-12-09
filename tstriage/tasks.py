@@ -25,8 +25,9 @@ def Analyze(item, epgStation: EPGStation, quiet: bool):
     indexPath = destination / '_metadata' / workingPath.with_suffix('.ptsmap').name
     minSilenceLen = item.get('cutter', {}).get('minSilenceLen', 800)
     silenceThresh =  item.get('cutter', {}).get('silenceThresh', -80)
+    splitPosShift = item.get('cutter', {}).get('splitPosShift', 1)
     inputFile = InputFile(workingPath)
-    AnalyzeVideo(inputFile=inputFile, indexPath=indexPath, silenceThresh=silenceThresh, minSilenceLen=minSilenceLen, quiet=quiet)
+    AnalyzeVideo(inputFile=inputFile, indexPath=indexPath, silenceThresh=silenceThresh, minSilenceLen=minSilenceLen, splitPosShift=splitPosShift, quiet=quiet)
 
     logger.info('Extracting EPG ...')
     EPG.Dump(workingPath, quiet=quiet)
