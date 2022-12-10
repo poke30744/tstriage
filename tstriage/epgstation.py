@@ -54,7 +54,9 @@ class EPGStation:
             return channels
 
     def GetEPG(self, path, limit=24) -> dict:
-        with urllib.request.urlopen(f'{self.url}/api/recorded?isHalfWidth=true&limit={limit}&offset=0&reverse=false') as response:
+        hyphenPos = path.stem.find('-')
+        keyword = path.stem[hyphenPos+1 :]
+        with urllib.request.urlopen(f'{self.url}/api/recorded?isHalfWidth=true&limit={limit}&keyword={urllib.parse.quote(keyword)}') as response:
             recorded = json.load(response)
             for epg in recorded['records']:
                 filename = urllib.parse.unquote(epg['videoFiles'][0]['filename'])
