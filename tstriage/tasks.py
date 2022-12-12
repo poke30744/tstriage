@@ -61,6 +61,9 @@ def Mark(item, epgStation: EPGStation, quiet: bool):
     logger.info('Marking ...')
     indexPath = destination / '_metadata' / workingPath.with_suffix('.ptsmap').name
     markerPath = destination / '_metadata' /  workingPath.with_suffix('.markermap').name
+    if markerPath.exists() and indexPath.stat().st_mtime > markerPath.stat().st_mtime:
+         logger.warn(f'removing {markerPath} ...')
+         markerPath.unlink()
     subtitles.MarkerMap(markerPath, PtsMap(indexPath)).MarkAll(videoPath=workingPath, assPath=destination / '_metadata' / path.with_suffix('.ass.original').name)
     clipinfo.MarkerMap(markerPath, PtsMap(indexPath)).MarkAll(videoPath=workingPath, quiet=quiet)
     epg = EPG(destination / '_metadata' / path.with_suffix('.epg').name, inputFile, epgStation.GetChannels())
