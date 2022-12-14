@@ -152,7 +152,7 @@ class Runner:
             elif task == 'mark':
                 self.Mark()
             elif task == 'cut':
-                    self.Cut()
+                self.Cut()
             elif task == 'encode':
                 self.Encode()
             elif task == 'confirm':
