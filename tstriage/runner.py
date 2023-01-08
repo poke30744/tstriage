@@ -34,7 +34,7 @@ class Runner:
             if self.nas.HadBeenEncoded(path) or self.nas.HasActionItem(path):
                 continue
             destination = None
-            for keyword in reversed(sorted(self.epgStation.GetKeywords())):
+            for keyword in sorted(self.epgStation.GetKeywords(), key=len, reverse=True):
                 if unicodedata.normalize('NFKC', keyword) in unicodedata.normalize('NFKC', path.stem):
                     epg = self.epgStation.GetEPG(path)
                     if epg is None:
