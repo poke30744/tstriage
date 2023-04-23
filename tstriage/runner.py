@@ -41,7 +41,8 @@ class Runner:
                         break
                     with (Path(__file__).parent / 'event.yml').open(encoding='utf-8') as f:        
                         eventDesc = yaml.load(f, Loader=yaml.FullLoader)
-                    genreDesc = eventDesc['Genre'][str(epg['genre1'])]
+                        genre = epg['genre1'] if 'genre1' in epg else epg['genre2']
+                    genreDesc = eventDesc['Genre'][str(genre)]
                     destination = self.nas.destination / genreDesc / keyword
                     break
             item = {
