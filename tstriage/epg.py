@@ -49,6 +49,8 @@ class EPG:
             name = item.get('name')
             if name:
                 name = unicodedata.normalize('NFKC', name)
+                name = name.replace('(', '[')
+                name = name.replace(')', ']')
                 #name = name.replace(chr(8217), "'")
                 videoName = unicodedata.normalize('NFKC', self.path.stem)
                 if (name in videoName or re.sub(r"\[.*?\]", "", name) in videoName) and item.get('serviceId') == self.ServiceId():
