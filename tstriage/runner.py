@@ -23,11 +23,10 @@ class Runner:
                 os.environ['PATH'] = f'{os.environ["PATH"]};{pathToAdd}'
         self.encoder = configuration['Encoder']
         self.presets = configuration['Presets']
-        self.epgStation = EPGStation(url=configuration['EPGStation'], cache=configuration['Cache'], recorded=configuration['Uncategoried']) if 'EPGStation' in configuration else None
+        self.epgStation = EPGStation(url=configuration['EPGStation'], cache=configuration['Cache'], recorded=configuration['Uncategoried'])
         self.nas = NAS(
             recorded=Path(self.configuration['Uncategoried']),
-            destination=Path(configuration['Destination']),
-            epgStation=self.epgStation)
+            destination=Path(configuration['Destination']))
 
     def Categorize(self):
         for path in tqdm(self.nas.RecordedFiles(), desc="Categorizing", disable=self.quiet):

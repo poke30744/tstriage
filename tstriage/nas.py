@@ -1,14 +1,12 @@
-from genericpath import isfile
 import json
 from pathlib import Path
-from .epgstation import EPGStation
+from typing import Optional
 from tqdm import tqdm
 
 class NAS:
-    def __init__(self, recorded: Path, destination: Path, epgStation: EPGStation=None) -> None:
+    def __init__(self, recorded: Path, destination: Path):
         self.recorded = recorded
         self.destination = destination
-        self.epgStation = epgStation
         self.tstriageFolder = recorded / '_tstriage'
         self.encodedFilesPath = self.tstriageFolder / 'encodedFiles.txt'
 
@@ -16,24 +14,19 @@ class NAS:
         if not force:
             if self.encodedFilesPath.exists():
                 return
-        if self.epgStation is not None:
-            self.epgStation.BusyWait()
         if not self.tstriageFolder.exists():
             self.tstriageFolder.mkdir()
-        allVideoFiles = []
+        allVideoFiles: list[Path] = []
         for path in tqdm(Path(self.destination).glob('**/*'), desc="Loading encoded files"):
             if path.suffix in ('.mp4',) and (path.parent / '_metadata').exists():
                 allVideoFiles.append(path)
         encodedFiles = []
         for path in tqdm(Path(self.recorded).glob('*'), desc='loading recorded files'):
             if path.is_file():
-                encoded = False
                 for p2 in allVideoFiles:
                     if path.stem in p2.stem or p2.stem in path.stem:
-                        encoded = True
+                        encodedFiles.append(p2.name)
                         break
-                if encoded:
-                    encodedFiles.append(p2.name)
         with self.encodedFilesPath.open('w') as f:
             json.dump(sorted([str(i) for i in encodedFiles]), f, ensure_ascii=False, indent=True)
     
@@ -58,7 +51,7 @@ class NAS:
                 return True
         return False
     
-    def ActionItems(self, suffix: str=None) -> list[Path]:
+    def ActionItems(self, suffix: Optional[str]=None) -> list[Path]:
         actionItems = []
         for path in self.tstriageFolder.glob('*.*'):
             if not path.suffix in ['.ts', '.m2ts', '.txt']:
@@ -68,7 +61,7 @@ class NAS:
                 actionItems.append(path)
         return actionItems
 
-    def FindActionItem(self, path: Path) -> Path:
+    def FindActionItem(self, path: Path) -> Optional[Path]:
         for actionItemPath in self.ActionItems():
             if path.stem == actionItemPath.stem:
                 return actionItemPath
@@ -82,7 +75,7 @@ class NAS:
         with actionItemPath.open('w') as f:
             json.dump(item, f, ensure_ascii=False, indent=True)
     
-    def LoadActionItem(self, path: Path) -> dict[str: str]:
+    def LoadActionItem(self, path: Path) -> dict[str, str]:
         with path.open() as f:
             return json.load(f)
     

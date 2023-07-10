@@ -76,7 +76,7 @@ class EPGStation:
                 if item.get('id') == epg['channelId']:
                     print(f'{item["name"]}', file=f)
                     break
-            duration = epg['endAt'] - epg['startAt'] 
+            duration: float = epg['endAt'] - epg['startAt'] 
             print(f"{time.strftime('%Y-%m-%d %H:%M (%a)', time.localtime(epg['startAt'] / 1000))} ~ {round(duration / 1000 / 60)} mins", file=f)
             return f.getvalue()
 

@@ -1,5 +1,6 @@
 import shutil, logging, subprocess, os
 from pathlib import Path
+from typing import Optional
 from tqdm import tqdm
 from .epgstation import EPGStation
 
@@ -39,7 +40,7 @@ def CopyWithProgress2(srcPath: Path, dstPath: Path, quiet=False):
     if srcPath.name != dstPath.name:
         shutil.move(dstPath.parent / srcPath.name, dstPath)
 
-def CopyWithProgress(srcPath: Path, dstPath: Path, force: bool=False, epgStation: EPGStation=None):
+def CopyWithProgress(srcPath: Path, dstPath: Path, force: bool=False):
     if not srcPath.exists():
         raise FileNotFoundError()
     if not force and dstPath.is_file() and srcPath.stat().st_size == dstPath.stat().st_size and round(srcPath.stat().st_mtime) == round(dstPath.stat().st_mtime):
@@ -50,16 +51,11 @@ def CopyWithProgress(srcPath: Path, dstPath: Path, force: bool=False, epgStation
             logger.warn(f'Removing {dstPath} ...')
         logger.info(f'Copying {srcPath.name} ...')
     Path(dstPath).parent.mkdir(parents=True, exist_ok=True)
-    if epgStation is not None:
-        if not srcPath.is_relative_to(epgStation.recorded) and not dstPath.is_relative_to(epgStation.recorded):
-            epgStation = None # no need to block copying
     with open(srcPath, 'rb') as rf:
         with open(dstPath, 'wb') as wf:
             with tqdm(total=srcPath.stat().st_size, unit_scale=True, unit='M') as pbar:
                 remaining = srcPath.stat().st_size
                 while remaining:
-                    if epgStation is not None:
-                        epgStation.BusyWait()
                     buf = rf.read(1024 * 1024)
                     wf.write(buf)
                     pbar.update(len(buf))

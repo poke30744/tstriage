@@ -105,6 +105,7 @@ class MarkerMap(tsmarker.common.MarkerMap):
             logger.info('Use subtitles to retrieve program clips ...')
         return clips
     
+    @staticmethod
     def MergeNeighbors(clips: list) -> list:
          # merge neighbor clips
         mergedClips = []
@@ -120,12 +121,14 @@ class MarkerMap(tsmarker.common.MarkerMap):
                     mergedClips.append(clip)
         return mergedClips
 
+    @staticmethod
     def GetClipsDuration(clips):
         duration = 0
         for clip in clips:
             duration += clip[1] - clip[0]
         return duration
 
+    @staticmethod
     def SplitClips(programClips: list, num: int) -> list[list]:
         splittedClips = []
         programsDuration = MarkerMap.GetClipsDuration(programClips)
@@ -170,12 +173,15 @@ def EncodePipeline(inFile: Path, ptsMap: PtsMap, markerMap: MarkerMap, outFile: 
                 videoInfo = InputFile(inFile).GetInfo()
                 sar = videoInfo.sar
                 w, h = cropInfo['w'], cropInfo['h']
-                for dar in ((16, 9), (4, 3), (1,1), (999, 999)):
+                availableDARs: list[tuple[int, int]] = [(16, 9), (4, 3), (1,1)]
+                darFound: tuple[int, int] = (999, 999)
+                for dar in availableDARs:
                     if 0.95 < w * sar[0] / (h * sar[1]) / (dar[0] / dar[1]) < 1.05:
+                        darFound = dar
                         break
                 zoomRate = w * h / (videoInfo.width * videoInfo.height)
-                if dar[0] != 999 and zoomRate < 0.9:
-                    cropInfo['dar'], cropInfo['sar'] = dar, videoInfo.sar
+                if darFound[0] != 999 and zoomRate < 0.9:
+                    cropInfo['dar'], cropInfo['sar'] = darFound, videoInfo.sar
                 else:
                     cropInfo = None
     inputFile = InputFile(inFile)
@@ -190,10 +196,7 @@ def EncodePipeline(inFile: Path, ptsMap: PtsMap, markerMap: MarkerMap, outFile: 
             if currentOutFile.exists():
                 currentOutFile.unlink()
             encodeTsP = subprocess.Popen(inputFile.EncodeTsCmd('-', currentOutFile, preset, encoder, cropInfo), stdin=subprocess.PIPE, stderr=encodeLogs)
-            with encodeTsP:
-                if not noStrip:
-                    # strip
-                    stripTsP = subprocess.Popen(inputFile.StripTsCmd('-', '-', fixAudio=fixAudio), stdin=subprocess.PIPE, stdout=encodeTsP.stdin, stderr=stripLogs)
+            with encodeTsP:    
                 # subtitles
                 startupinfo = subprocess.STARTUPINFO(wShowWindow=6, dwFlags=subprocess.STARTF_USESHOWWINDOW) if hasattr(subprocess, 'STARTUPINFO') else None
                 creationflags = subprocess.CREATE_NEW_CONSOLE if hasattr(subprocess, 'CREATE_NEW_CONSOLE') else 0
@@ -204,6 +207,8 @@ def EncodePipeline(inFile: Path, ptsMap: PtsMap, markerMap: MarkerMap, outFile: 
                     creationflags=creationflags,
                     shell=True)
                 if not noStrip:
+                    # strip
+                    stripTsP = subprocess.Popen(inputFile.StripTsCmd('-', '-', fixAudio=fixAudio), stdin=subprocess.PIPE, stdout=encodeTsP.stdin, stderr=stripLogs)
                     with stripTsP, subtitlesP:
                         # extract (data pump)
                         teeFile = Tee(outPipes=[stripTsP.stdin, subtitlesP.stdin], couldBeBroken=[subtitlesP.stdin])
@@ -221,7 +226,7 @@ def EncodePipeline(inFile: Path, ptsMap: PtsMap, markerMap: MarkerMap, outFile: 
                 subPath = currentOutFile.with_suffix(suffix)
                 if subPath.exists():
                     subtitles = pysubs2.load(str(subPath), encoding='utf-8')
-                    subtitles.save(subPath)
+                    subtitles.save(str(subPath))
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Process TS files in pipeline')
