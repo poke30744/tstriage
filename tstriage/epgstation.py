@@ -1,11 +1,12 @@
 from pathlib import Path
 from datetime import datetime, timedelta
+from typing import Optional
 import urllib.request, urllib.parse, shutil, json, time, logging, argparse, io
 
 logger = logging.getLogger('tstriage.epgstation')
 
 class EPGStation:
-    def __init__(self, url: str, cache: Path=None, recorded: Path=None):
+    def __init__(self, url: str, cache: Optional[Path]=None, recorded: Optional[Path]=None):
         self.url = url
         self.reservesJsonPath = Path('reserves.json') if cache is None else Path(cache).expanduser() / 'reserves.json'
         self.channelsJsonPath = Path('channels.json') if cache is None else Path(cache).expanduser() / 'channels.json'
@@ -53,7 +54,7 @@ class EPGStation:
                 json.dump(channels, f)
             return channels
 
-    def GetEPG(self, path, limit=24) -> dict:
+    def GetEPG(self, path, limit=24) -> Optional[dict]:
         hyphenPos = path.stem.find('-')
         keyword = path.stem[hyphenPos+1 :]
         with urllib.request.urlopen(f'{self.url}/api/recorded?isHalfWidth=true&limit={limit}&keyword={urllib.parse.quote(keyword)}') as response:

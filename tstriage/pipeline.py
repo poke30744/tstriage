@@ -168,14 +168,14 @@ def EncodePipeline(inFile: Path, ptsMap: PtsMap, markerMap: MarkerMap, outFile: 
             if cropInfo is not None:
                 # double check if cropping is really needed
                 videoInfo = InputFile(inFile).GetInfo()
-                sar = videoInfo['sar']
+                sar = videoInfo.sar
                 w, h = cropInfo['w'], cropInfo['h']
                 for dar in ((16, 9), (4, 3), (1,1), (999, 999)):
                     if 0.95 < w * sar[0] / (h * sar[1]) / (dar[0] / dar[1]) < 1.05:
                         break
-                zoomRate = w * h / (videoInfo['width'] * videoInfo['height'])
+                zoomRate = w * h / (videoInfo.width * videoInfo.height)
                 if dar[0] != 999 and zoomRate < 0.9:
-                    cropInfo['dar'], cropInfo['sar'] = dar, videoInfo['sar']
+                    cropInfo['dar'], cropInfo['sar'] = dar, videoInfo.sar
                 else:
                     cropInfo = None
     inputFile = InputFile(inFile)

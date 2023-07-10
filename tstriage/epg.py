@@ -1,4 +1,6 @@
+from functools import cache
 import os, subprocess, json, unicodedata, time, argparse, re, copy
+from typing import Optional
 from pathlib import Path
 import logging
 import yaml
@@ -35,7 +37,7 @@ class EPG:
         else:
             subprocess.run(dumpCmd)
 
-    def __init__(self, path: Path, inputFile: InputFile, channels: dict=None) -> None:
+    def __init__(self, path: Path, inputFile: InputFile, channels: Optional[dict]=None) -> None:
         self.path = path
         self.inputFile = inputFile
         with self.path.open(encoding='utf-8') as f:
@@ -62,14 +64,11 @@ class EPG:
         self.info = info
         return self.info
 
-    def ServiceId(self) -> str:
-        try:
-            return self.__serviceId
-        except AttributeError:
-            self.__serviceId = self.inputFile.GetInfo()['serviceId']
-            return self.__serviceId
+    @cache
+    def ServiceId(self) -> int:
+        return self.inputFile.GetInfo().serviceId
 
-    def Channel(self) -> str:
+    def Channel(self) -> Optional[str]:
         if self.channels is None:
             with (Path(__file__).parent / 'channels.yml').open(encoding='utf-8') as f:        
                 self.channels = yaml.load(f, Loader=yaml.FullLoader)

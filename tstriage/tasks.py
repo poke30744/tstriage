@@ -44,7 +44,7 @@ def Analyze(item, epgStation: EPGStation, quiet: bool):
         sub.unlink()
     
     info = inputFile.GetInfo()
-    logoPath = (path.parent / '_tstriage' / f'{epg.Channel()}_{info["width"]}x{info["height"]}').with_suffix('.png')
+    logoPath = (path.parent / '_tstriage' / f'{epg.Channel()}_{info.width}x{info.height}').with_suffix('.png')
     if not logoPath.exists():
         ExtractLogoPipeline(inFile=workingPath, ptsMap=PtsMap(indexPath), outFile=logoPath, quiet=quiet)
 
@@ -68,7 +68,7 @@ def Mark(item, epgStation: EPGStation, quiet: bool):
     clipinfo.MarkerMap(markerPath, PtsMap(indexPath)).MarkAll(videoPath=workingPath, quiet=quiet)
     epg = EPG(destination / '_metadata' / path.with_suffix('.epg').name, inputFile, epgStation.GetChannels())
     info = inputFile.GetInfo()
-    logoPath = (path.parent / '_tstriage' / f'{epg.Channel()}_{info["width"]}x{info["height"]}').with_suffix('.png')
+    logoPath = (path.parent / '_tstriage' / f'{epg.Channel()}_{info.width}x{info.height}').with_suffix('.png')
     logo.MarkerMap(markerPath, PtsMap(indexPath)).MarkAll(videoPath=workingPath, logoPath=logoPath, quiet=quiet)
 
     noEnsemble = item['marker'].get('noEnsemble', False)

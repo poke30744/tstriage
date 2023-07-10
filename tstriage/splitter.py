@@ -49,7 +49,7 @@ def Trim(videoPath, outputPath=None):
                         break
                     wf.write(data)
             path.unlink()
-    if InputFile(outputPath).GetInfo()['duration'] / InputFile(videoPath).GetInfo()['duration'] < 0.95:
+    if InputFile(outputPath).GetInfo().duration / InputFile(videoPath).GetInfo().duration < 0.95:
         # trimmed more than expected
         raise InvalidTsFormat(f'"{videoPath.name}" is invalid!')
     return outputPath
