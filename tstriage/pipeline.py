@@ -3,6 +3,7 @@ from pathlib import Path
 import pysubs2
 import yaml
 from tscutter import ffmpeg
+from tscutter.common import GetShortPath
 from tsmarker.pipeline import PtsMap, ExtractLogoPipeline, CropDetectPipeline
 import tsmarker.common
 
@@ -12,7 +13,7 @@ class InputFile(ffmpeg.InputFile):
     def StripTsCmd(self, inFile, outFile, audioLanguages=['jpn'], fixAudio=False, noMap=False):
         args = [
             self.ffmpeg, '-hide_banner', '-y',
-            '-i', inFile,
+            '-i', GetShortPath(inFile),
             '-c:v', 'copy'
         ]
         if fixAudio:
@@ -54,7 +55,7 @@ class InputFile(ffmpeg.InputFile):
             videoCodec = [ '-c:v', encoder, '-crf', str(preset['crf']) ]
         args = [
             self.ffmpeg, '-hide_banner', '-y',
-            '-i', inPath
+            '-i', GetShortPath(inPath)
         ]
         if len(videoFilter) > 0:
             args += [ '-vf', videoFilter ]
@@ -195,7 +196,8 @@ def EncodePipeline(inFile: Path, ptsMap: PtsMap, markerMap: MarkerMap, outFile: 
             logger.info(f'Encoding {currentOutFile.name} ...')
             if currentOutFile.exists():
                 currentOutFile.unlink()
-            encodeTsP = subprocess.Popen(inputFile.EncodeTsCmd('-', currentOutFile, preset, encoder, cropInfo), stdin=subprocess.PIPE, stderr=encodeLogs)
+            currentOutFile.touch()
+            encodeTsP = subprocess.Popen(inputFile.EncodeTsCmd('-', GetShortPath(currentOutFile), preset, encoder, cropInfo), stdin=subprocess.PIPE, stderr=encodeLogs)
             with encodeTsP:    
                 # subtitles
                 startupinfo = subprocess.STARTUPINFO(wShowWindow=6, dwFlags=subprocess.STARTF_USESHOWWINDOW) if hasattr(subprocess, 'STARTUPINFO') else None
