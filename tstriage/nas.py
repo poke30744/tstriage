@@ -63,7 +63,7 @@ class NAS:
 
     def FindActionItem(self, path: Path) -> Optional[Path]:
         for actionItemPath in self.ActionItems():
-            if path.stem == actionItemPath.stem:
+            if path.stem in actionItemPath.stem:
                 return actionItemPath
         return None
     
