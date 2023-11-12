@@ -3,6 +3,7 @@ import argparse, json, os
 from pathlib import Path
 import logging
 import unicodedata
+import psutil
 import yaml
 from tqdm import tqdm
 from .epgstation import EPGStation
@@ -27,6 +28,15 @@ class Runner:
         self.nas = NAS(
             recorded=Path(self.configuration['Uncategoried']),
             destination=Path(configuration['Destination']))
+    
+    # wait for other instances to finish
+    def SingleInstanceWait(self):
+        allProcesses = psutil.process_iter(attrs=['pid', 'name'])
+        currentProcess = psutil.Process()
+        for process in allProcesses:
+            if process.info['name'] == currentProcess.name and process.info['pid'] != currentProcess.pid: # type: ignore
+                logger.info(f'waiting for process {process.info["pid"]} to finish ...') # type: ignore
+                process.wait()
 
     def Categorize(self):
         for path in tqdm(self.nas.RecordedFiles(), desc="Categorizing", disable=self.quiet):
@@ -141,6 +151,8 @@ class Runner:
             path.unlink()
     
     def Run(self, tasks):
+        self.SingleInstanceWait()
+
         logger.info(f'running {tasks} ...')
         for task in tasks:
             if task == 'categorize':
