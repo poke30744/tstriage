@@ -180,7 +180,10 @@ def Encode(item, encoder: str, presets: dict, quiet: bool):
             if p.suffix == '.mp4':
                 CopyWithProgress2(p, destination / p.name, quiet=quiet)
             elif p.suffix in ('.ass', '.srt'):
-                CopyWithProgress2(p, destination / 'Subtitles' / p.name, quiet=quiet)
+                destName = destination / 'Subtitles' / p.name
+                if destName.suffix == '.srt':
+                    destName = destName.with_suffix('.ssrrtt')
+                CopyWithProgress2(p, destName, quiet=quiet)
     
     logger.info('Uploading triage file ...')
     tstriageFolder = path.parent / '_tstriage'
