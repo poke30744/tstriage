@@ -18,7 +18,8 @@ setuptools.setup(
     install_requires=[
         'tscutter',
         'tsmarker',
-        'PyYAML'
+        'PyYAML',
+        'psutil'
     ],
     package_data={'': ['channels.yml', 'event.yml']},
     include_package_data=True,
