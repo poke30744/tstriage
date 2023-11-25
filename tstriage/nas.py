@@ -1,6 +1,6 @@
 import json
 from pathlib import Path
-from typing import Optional
+from typing import Generator, Optional
 from tqdm import tqdm
 
 class NAS:
@@ -51,16 +51,14 @@ class NAS:
                 return True
         return False
     
-    def ActionItems(self, suffix: Optional[str]=None) -> list[Path]:
-        actionItems = []
+    def ActionItems(self, suffix: Optional[str]=None) -> Generator[Path, None, None]:
         for path in self.tstriageFolder.glob('*.*'):
             if not path.suffix in ['.ts', '.m2ts', '.txt']:
                 if suffix is not None:
                     if not path.suffix == suffix:
                         continue
-                actionItems.append(path)
-        return actionItems
-
+                yield path
+                
     def FindActionItem(self, path: Path) -> Optional[Path]:
         for actionItemPath in self.ActionItems():
             if path.stem in actionItemPath.stem:

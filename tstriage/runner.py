@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import argparse, json, os, socket
+from itertools import chain
 from pathlib import Path
 import logging
 import unicodedata
@@ -139,7 +140,7 @@ class Runner:
                 path.rename(path.with_suffix('.error'))
 
     def Confirm(self):
-        for path in self.nas.ActionItems('.toencode') + self.nas.ActionItems('.toconfirm') + self.nas.ActionItems('.tocleanup'):
+        for path in chain(self.nas.ActionItems('.toencode'), self.nas.ActionItems('.toconfirm'), self.nas.ActionItems('.tocleanup')):
             item = self.nas.LoadActionItem(path)
             reEncodingNeeded = Confirm(item=item)
             path.unlink()
