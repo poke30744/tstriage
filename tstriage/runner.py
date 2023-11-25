@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-import argparse, json, os
+import argparse, json, os, socket
 from pathlib import Path
 import logging
 import unicodedata
@@ -84,6 +84,7 @@ class Runner:
     def Analyze(self):
         for path in self.nas.ActionItems('.toanalyze'):
             item = self.nas.LoadActionItem(path)
+            path = path.rename(path.with_suffix(f'.toanalyze.{socket.gethostname()}'))
             try:
                 Analyze(item=item, epgStation=self.epgStation, quiet=self.quiet)
                 path.unlink()
@@ -92,11 +93,12 @@ class Runner:
                 raise
             except:
                 logger.exception(f'in analyzing "{path}":')
-                path.rename(path.with_suffix('.toanalyze.error'))
+                path.rename(path.with_suffix('.error'))
 
     def Mark(self):
         for path in self.nas.ActionItems('.tomark'):
             item = self.nas.LoadActionItem(path)
+            path = path.rename(path.with_suffix(f'.toanalyze.{socket.gethostname()}'))
             try:
                 Mark(item=item, epgStation=self.epgStation, quiet=self.quiet)
                 path.unlink()
@@ -105,11 +107,12 @@ class Runner:
                 raise
             except:
                 logger.exception(f'in marking "{path}":')
-                path.rename(path.with_suffix('.tomark.error'))
+                path.rename(path.with_suffix('.error'))
 
     def Cut(self):
         for path in self.nas.ActionItems('.tocut'):
             item = self.nas.LoadActionItem(path)
+            path = path.rename(path.with_suffix(f'.toanalyze.{socket.gethostname()}'))
             try:
                 Cut(item=item, quiet=self.quiet)
                 path.unlink()
@@ -118,11 +121,12 @@ class Runner:
                 raise
             except:
                 logger.exception(f'in cutting "{path}":')
-                path.rename(path.with_suffix('.tocut.error'))
+                path.rename(path.with_suffix('.error'))
 
     def Encode(self):
         for path in self.nas.ActionItems('.toencode'):
             item = self.nas.LoadActionItem(path)
+            path = path.rename(path.with_suffix(f'.toanalyze.{socket.gethostname()}'))
             try:
                 encodedFile = Encode(item=item, encoder=self.encoder, presets=self.presets, quiet=self.quiet)
                 path.unlink()
@@ -132,7 +136,7 @@ class Runner:
                 raise
             except:
                 logger.exception(f'in encoding "{path}":')
-                path.rename(path.with_suffix('.toencode.error'))
+                path.rename(path.with_suffix('.error'))
 
     def Confirm(self):
         for path in self.nas.ActionItems('.toencode') + self.nas.ActionItems('.toconfirm') + self.nas.ActionItems('.tocleanup'):
