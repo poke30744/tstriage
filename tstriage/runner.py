@@ -122,7 +122,7 @@ class Runner:
     def Mark(self):
         for path in self.nas.ActionItems('.tomark'):
             item = self.LoadActionItem(path)
-            path = path.rename(path.with_suffix(f'.toanalyze.{socket.gethostname()}'))
+            path = path.rename(path.with_suffix(f'.tomark.{socket.gethostname()}'))
             try:
                 Mark(item=item, epgStation=self.epgStation, quiet=self.quiet)
                 path.unlink()
@@ -136,7 +136,7 @@ class Runner:
     def Cut(self):
         for path in self.nas.ActionItems('.tocut'):
             item = self.LoadActionItem(path)
-            path = path.rename(path.with_suffix(f'.toanalyze.{socket.gethostname()}'))
+            path = path.rename(path.with_suffix(f'.tocut.{socket.gethostname()}'))
             try:
                 Cut(item=item, quiet=self.quiet)
                 path.unlink()
@@ -150,7 +150,7 @@ class Runner:
     def Encode(self):
         for path in self.nas.ActionItems('.toencode'):
             item = self.LoadActionItem(path)
-            path = path.rename(path.with_suffix(f'.toanalyze.{socket.gethostname()}'))
+            path = path.rename(path.with_suffix(f'.toencode.{socket.gethostname()}'))
             try:
                 encodedFile = Encode(item=item, encoder=self.encoder, presets=self.presets, quiet=self.quiet)
                 path.unlink()
