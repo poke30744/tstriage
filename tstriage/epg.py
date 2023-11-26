@@ -16,6 +16,44 @@ def represent_str(dumper, instance):
         return dumper.represent_scalar('tag:yaml.org,2002:str', instance)
 yaml.add_representer(str, represent_str)
 
+enclosed_characters_convert_table = {
+    '\U0001F14A': '[HV]',
+    '\U0001F13F': '[P]',
+    '\U0001F14C': '[SD]',
+    '\U0001F146': '[W]',
+    '\U0001F14B': '[MV]',
+    '\U0001F210': '[手]',
+    '\U0001F211': '[字]',
+    '\U0001F212': '[双]',
+    '\U0001F213': '[デ]',
+    '\U0001F142': '[S]',
+    '\U0001F214': '[二]',
+    '\U0001F215': '[多]',
+    '\U0001F216': '[解]',
+    '\U0001F14D': '[SS]',
+    '\U0001F131': '[B]',
+    '\U0001F13D': '[N]',
+    '\U0001F217': '[天]',
+    '\U0001F218': '[交]',
+    '\U0001F219': '[映]',
+    '\U0001F21A': '[無]',
+    '\U0001F21B': '[料]',
+    '\U000026BF': '[鍵]',
+    '\U0001F21C': '[前]',
+    '\U0001F21D': '[後]',
+    '\U0001F21E': '[再]',
+    '\U0001F21F': '[新]',
+    '\U0001F220': '[初]',
+    '\U0001F221': '[終]',
+    '\U0001F222': '[生]',
+    '\U0001F223': '[販]',
+    '\U0001F224': '[声]',
+    '\U0001F225': '[吹]',
+    '\U0001F14E': '[PPV]',
+    '\U00003299': '[秘]',
+    '\U0001F200': '[ほか]',
+}
+
 class EPG:
     @staticmethod
     def Dump(videoPath, quiet: bool=False):
@@ -51,6 +89,8 @@ class EPG:
         for item in self.epg:
             name = item.get('name')
             if name:
+                for k,v in enclosed_characters_convert_table.items():
+                    name = name.replace(k, v)
                 name = unicodedata.normalize('NFKC', name)
                 #name = name.replace('(', '[')
                 #name = name.replace(')', ']')
@@ -59,6 +99,7 @@ class EPG:
                 if (name in videoName or re.sub(r"\[.*?\]", "", name) in videoName) and item.get('serviceId') == self.ServiceId():
                     for k in item:
                         info[k] = item[k]
+                    break
         if info == {}:
             raise InvalidTsFormat(f'"{self.path.name}" is invalid!')
         self.info = info
