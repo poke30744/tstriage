@@ -56,7 +56,7 @@ enclosed_characters_convert_table = {
 
 class EPG:
     @staticmethod
-    def Dump(videoPath, quiet: bool=False):
+    def Dump(videoPath, epgPath, quiet: bool=False):
         if os.name == 'nt':
             CheckExtenralCommand('mirakurun-epgdump.cmd')
         else:
@@ -65,7 +65,6 @@ class EPG:
         if not videoPath.is_file():
             raise TsFileNotFound(f'"{videoPath.name}" not found!')
         videoPath = Path(videoPath)
-        epgPath = videoPath.with_suffix('.epg')
         if os.name == 'nt':
             dumpCmd = f'mirakurun-epgdump.cmd "{videoPath}" "{epgPath}"'
         else:
@@ -141,4 +140,5 @@ if __name__ == "__main__":
     parser.add_argument('--input', '-i', required=True, help='input mpegts path')
     args = parser.parse_args()
 
-    EPG.Dump(args.input)
+    videoPath = Path(args.input)
+    EPG.Dump(videoPath, videoPath.with_suffix('.epg'))

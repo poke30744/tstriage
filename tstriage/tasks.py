@@ -1,5 +1,6 @@
 from pathlib import Path
 import shutil, logging
+import tempfile
 from tscutter.ffmpeg import InputFile
 from tscutter.analyze import AnalyzeVideo
 import tsmarker.common
@@ -30,15 +31,15 @@ def Analyze(item, epgStation: EPGStation, quiet: bool):
     AnalyzeVideo(inputFile=inputFile, indexPath=indexPath, silenceThresh=silenceThresh, minSilenceLen=minSilenceLen, splitPosShift=splitPosShift, quiet=quiet)
 
     logger.info('Extracting EPG ...')
-    EPG.Dump(workingPath, quiet=quiet)
     epgPath = workingPath.with_suffix('.epg')
+    EPG.Dump(workingPath, epgPath, quiet=quiet)
     CopyWithProgress2(epgPath, destination / '_metadata' / epgPath.name, quiet=quiet)
     epg = EPG(epgPath, inputFile,  epgStation.GetChannels())
     epg.OutputDesc(destination / workingPath.with_suffix('.yaml').name)
     epgPath.unlink()
 
     logger.info('Extracting subtitles ...')
-    for sub in subtitles.Extract(workingPath):
+    for sub in subtitles.Extract(workingPath, workingPath.with_suffix("")):
         if sub.suffix == '.ass':
              CopyWithProgress2(sub, destination / '_metadata' / sub.with_suffix('.ass.original').name, quiet=quiet)
         sub.unlink()
