@@ -31,14 +31,17 @@ class WindowsInhibitor:
         WindowsInhibitor.uninhibit()
 
 def CopyWithProgress2(srcPath: Path, dstPath: Path, quiet=False):
-    robocopyCmd = ['robocopy', '/z', '/copy:DT', '/NJH', '/NJS', '/NDL']
-    if quiet:
-        robocopyCmd += ['/NP']
-    completedProcess = subprocess.run(robocopyCmd + [srcPath.parent, dstPath.parent, srcPath.name])
-    if completedProcess.returncode >= 8:
-        completedProcess.check_returncode()
-    if srcPath.name != dstPath.name:
-        shutil.move(dstPath.parent / srcPath.name, dstPath)
+    if os.name == 'nt':
+        robocopyCmd = ['robocopy', '/z', '/copy:DT', '/NJH', '/NJS', '/NDL']
+        if quiet:
+            robocopyCmd += ['/NP']
+        completedProcess = subprocess.run(robocopyCmd + [srcPath.parent, dstPath.parent, srcPath.name])
+        if completedProcess.returncode >= 8:
+            completedProcess.check_returncode()
+        if srcPath.name != dstPath.name:
+            shutil.move(dstPath.parent / srcPath.name, dstPath)
+    else:
+        CopyWithProgress(srcPath, dstPath)
 
 def CopyWithProgress(srcPath: Path, dstPath: Path, force: bool=False):
     if not srcPath.exists():
