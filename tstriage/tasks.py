@@ -56,7 +56,6 @@ def Mark(item, epgStation: EPGStation, quiet: bool):
 
     logger.info('Copying TS file to working folder ...')
     workingPath = cache / path.name
-    inputFile = InputFile(workingPath)
     CopyWithProgress2(path, workingPath, quiet=quiet)
     
     logger.info('Marking ...')
@@ -67,6 +66,7 @@ def Mark(item, epgStation: EPGStation, quiet: bool):
          markerPath.unlink()
     subtitles.MarkerMap(markerPath, PtsMap(indexPath)).MarkAll(videoPath=workingPath, assPath=destination / '_metadata' / path.with_suffix('.ass.original').name)
     clipinfo.MarkerMap(markerPath, PtsMap(indexPath)).MarkAll(videoPath=workingPath, quiet=quiet)
+    inputFile = InputFile(workingPath)
     epg = EPG(destination / '_metadata' / path.with_suffix('.epg').name, inputFile, epgStation.GetChannels())
     info = inputFile.GetInfo()
     logoPath = (path.parent / '_tstriage' / f'{epg.Channel()}_{info.width}x{info.height}').with_suffix('.png')
