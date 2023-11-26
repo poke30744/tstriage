@@ -17,15 +17,18 @@ class Runner:
     def __init__(self, configuration, quiet: bool):
         self.configuration = configuration
         self.quiet = quiet
-        self.cache = Path(configuration['Cache']).expanduser()
-        self.cache.mkdir(parents=True, exist_ok=True)
+        if 'Cache' in configuration:
+            self.cache = Path(configuration['Cache']).expanduser()
+            self.cache.mkdir(parents=True, exist_ok=True)
+        else:
+            self.cache = None
         if 'Path' in configuration:
             for key in configuration['Path']:
                 pathToAdd = configuration["Path"][key]
                 os.environ['PATH'] = f'{os.environ["PATH"]};{pathToAdd}'
         self.encoder = configuration['Encoder']
         self.presets = configuration['Presets']
-        self.epgStation = EPGStation(url=configuration['EPGStation'], cache=configuration['Cache'], recorded=configuration['Uncategoried'])
+        self.epgStation = EPGStation(url=configuration['EPGStation'], cache=self.cache, recorded=configuration['Uncategoried'])
         self.nas = NAS(
             recorded=Path(self.configuration['Uncategoried']),
             destination=Path(configuration['Destination']))
@@ -65,7 +68,7 @@ class Runner:
         with path.open() as f:
             item = json.load(f)
         # fix pathes
-        item['cache'] = str(self.cache)
+        item['cache'] = str(self.cache) if self.cache is not None else None
         item['path'] = str(self.nas.recorded / item['path'])
         item['destination'] = str(self.nas.destination / item['destination'])
         if os.name == 'nt':

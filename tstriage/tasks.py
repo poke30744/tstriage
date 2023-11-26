@@ -15,12 +15,15 @@ logger = logging.getLogger('tstriage.tasks')
 
 def Analyze(item, epgStation: EPGStation, quiet: bool):
     path = Path(item['path'])
-    cache = Path(item['cache']).expanduser()
     destination = Path(item['destination'])
 
-    logger.info('Copying TS file to working folder ...')
-    workingPath = cache / path.name
-    CopyWithProgress2(path, workingPath, quiet=quiet)
+    if item['cache'] is not None:
+        logger.info('Copying TS file to working folder ...')
+        cache = Path(item['cache']).expanduser()
+        workingPath = cache / path.name
+        CopyWithProgress2(path, workingPath, quiet=quiet)
+    else:
+        workingPath = path
 
     logger.info('Analyzing to split ...')
     indexPath = destination / '_metadata' / workingPath.with_suffix('.ptsmap').name
@@ -31,18 +34,17 @@ def Analyze(item, epgStation: EPGStation, quiet: bool):
     AnalyzeVideo(inputFile=inputFile, indexPath=indexPath, silenceThresh=silenceThresh, minSilenceLen=minSilenceLen, splitPosShift=splitPosShift, quiet=quiet)
 
     logger.info('Extracting EPG ...')
-    epgPath = workingPath.with_suffix('.epg')
+    epgPath = destination / '_metadata' / workingPath.with_suffix('.epg').name
     EPG.Dump(workingPath, epgPath, quiet=quiet)
-    CopyWithProgress2(epgPath, destination / '_metadata' / epgPath.name, quiet=quiet)
     epg = EPG(epgPath, inputFile,  epgStation.GetChannels())
     epg.OutputDesc(destination / workingPath.with_suffix('.yaml').name)
-    epgPath.unlink()
 
     logger.info('Extracting subtitles ...')
-    for sub in subtitles.Extract(workingPath, workingPath.with_suffix("")):
-        if sub.suffix == '.ass':
-             CopyWithProgress2(sub, destination / '_metadata' / sub.with_suffix('.ass.original').name, quiet=quiet)
-        sub.unlink()
+    with tempfile.TemporaryDirectory(prefix='ExtractSubtitles_') as tmpFolder:
+        for sub in subtitles.Extract(workingPath, Path(tmpFolder)):
+            if sub.suffix == '.ass':
+                CopyWithProgress2(sub, destination / '_metadata' / sub.with_suffix('.ass.original').name, quiet=quiet)
+                break
     
     info = inputFile.GetInfo()
     logoPath = (path.parent / '_tstriage' / f'{epg.Channel()}_{info.width}x{info.height}').with_suffix('.png')
