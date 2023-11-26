@@ -203,7 +203,7 @@ def EncodePipeline(inFile: Path, ptsMap: PtsMap, markerMap: MarkerMap, outFile: 
                 startupinfo = subprocess.STARTUPINFO(wShowWindow=6, dwFlags=subprocess.STARTF_USESHOWWINDOW) if hasattr(subprocess, 'STARTUPINFO') else None
                 creationflags = subprocess.CREATE_NEW_CONSOLE if hasattr(subprocess, 'CREATE_NEW_CONSOLE') else 0
                 subtitlesP = subprocess.Popen(    
-                    f'Captain2AssC.cmd - "{currentOutFile.with_suffix("")}"',
+                    f'Caption2AssC.cmd - "{currentOutFile.with_suffix("")}"',
                     stdin=subprocess.PIPE,
                     startupinfo=startupinfo,
                     creationflags=creationflags,
