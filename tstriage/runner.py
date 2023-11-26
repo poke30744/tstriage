@@ -59,11 +59,35 @@ class Runner:
                 'path': str(path),
                 'destination': str(destination),
             }
-            self.nas.CreateActionItem(item, '.categorized')
+            self.CreateActionItem(item, '.categorized')
+
+    def LoadActionItem(self, path: Path) -> dict[str, str]:
+        with path.open() as f:
+            item = json.load(f)
+        # fix pathes
+        item['cache'] = str(self.cache)
+        item['path'] = str(self.nas.recorded / item['path'])
+        item['destination'] = str(self.nas.destination / item['destination'])
+        if os.name == 'nt':
+            item['path'] = item['path'].replace('/', '\\')
+            item['destination'] = item['destination'].replace('/', '\\')
+        else:
+            item['path'] = item['path'].replace('\\', '/')
+            item['destination'] = item['destination'].replace('\\', '/')
+        return item
+    
+    def CreateActionItem(self, item, suffix: str) -> None:
+        actionItemPath = self.nas.tstriageFolder / Path(item['path']).with_suffix(suffix).name
+        if 'cache' in item:
+            del item['cache']
+        item['path'] = str(Path(item['path']).relative_to(self.nas.recorded))
+        item['destination'] = str(Path(item['destination']).relative_to(self.nas.destination))
+        with actionItemPath.open('w') as f:
+            json.dump(item, f, ensure_ascii=False, indent=True)
     
     def List(self):
         for path in self.nas.ActionItems('.categorized'):
-            item = self.nas.LoadActionItem(path)
+            item = self.LoadActionItem(path)
             encodeTo = item["destination"]
             if encodeTo != 'None':
                 with self.nas.FindTsTriageSettings(folder=Path(encodeTo)).open() as f:
@@ -72,24 +96,23 @@ class Runner:
                 newItem = {
                     'path': item['path'],
                     'destination': item['destination'],
-                    'cache': str(self.cache),
                     'cutter': settings.get('cutter', {}),
                     'marker': settings.get('marker', {}),
                     'encoder': settings.get('encoder', {})
                 }
-                self.nas.CreateActionItem(newItem, '.toanalyze')
+                self.CreateActionItem(newItem, '.toanalyze')
                 logger.info(f'Will process: {item["path"]}')
             else:
                 logger.warn(f'More information is needed: {item["path"]}')
 
     def Analyze(self):
         for path in self.nas.ActionItems('.toanalyze'):
-            item = self.nas.LoadActionItem(path)
+            item = self.LoadActionItem(path)
             path = path.rename(path.with_suffix(f'.toanalyze.{socket.gethostname()}'))
             try:
                 Analyze(item=item, epgStation=self.epgStation, quiet=self.quiet)
                 path.unlink()
-                self.nas.CreateActionItem(item, '.tomark')
+                self.CreateActionItem(item, '.tomark')
             except KeyboardInterrupt:
                 raise
             except:
@@ -98,12 +121,12 @@ class Runner:
 
     def Mark(self):
         for path in self.nas.ActionItems('.tomark'):
-            item = self.nas.LoadActionItem(path)
+            item = self.LoadActionItem(path)
             path = path.rename(path.with_suffix(f'.toanalyze.{socket.gethostname()}'))
             try:
                 Mark(item=item, epgStation=self.epgStation, quiet=self.quiet)
                 path.unlink()
-                self.nas.CreateActionItem(item, '.tocut')
+                self.CreateActionItem(item, '.tocut')
             except KeyboardInterrupt:
                 raise
             except:
@@ -112,12 +135,12 @@ class Runner:
 
     def Cut(self):
         for path in self.nas.ActionItems('.tocut'):
-            item = self.nas.LoadActionItem(path)
+            item = self.LoadActionItem(path)
             path = path.rename(path.with_suffix(f'.toanalyze.{socket.gethostname()}'))
             try:
                 Cut(item=item, quiet=self.quiet)
                 path.unlink()
-                self.nas.CreateActionItem(item, '.toencode')
+                self.CreateActionItem(item, '.toencode')
             except KeyboardInterrupt:
                 raise
             except:
@@ -126,12 +149,12 @@ class Runner:
 
     def Encode(self):
         for path in self.nas.ActionItems('.toencode'):
-            item = self.nas.LoadActionItem(path)
+            item = self.LoadActionItem(path)
             path = path.rename(path.with_suffix(f'.toanalyze.{socket.gethostname()}'))
             try:
                 encodedFile = Encode(item=item, encoder=self.encoder, presets=self.presets, quiet=self.quiet)
                 path.unlink()
-                self.nas.CreateActionItem(item, '.toconfirm')
+                self.CreateActionItem(item, '.toconfirm')
                 self.nas.AddEncodedFile(encodedFile)
             except KeyboardInterrupt:
                 raise
@@ -141,17 +164,17 @@ class Runner:
 
     def Confirm(self):
         for path in chain(self.nas.ActionItems('.toencode'), self.nas.ActionItems('.toconfirm'), self.nas.ActionItems('.tocleanup')):
-            item = self.nas.LoadActionItem(path)
+            item = self.LoadActionItem(path)
             reEncodingNeeded = Confirm(item=item)
             path.unlink()
             if reEncodingNeeded or path.suffix == '.toencode':
-                self.nas.CreateActionItem(item, '.toencode')
+                self.CreateActionItem(item, '.toencode')
             else:
-                self.nas.CreateActionItem(item, '.tocleanup')
+                self.CreateActionItem(item, '.tocleanup')
 
     def Cleanup(self):
         for path in self.nas.ActionItems('.tocleanup'):
-            item = self.nas.LoadActionItem(path)
+            item = self.LoadActionItem(path)
             Cleanup(item=item)
             path.unlink()
     

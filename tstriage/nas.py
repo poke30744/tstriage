@@ -68,15 +68,6 @@ class NAS:
     def HasActionItem(self, path: Path) -> bool:
         return self.FindActionItem(path) is not None
     
-    def CreateActionItem(self, item, suffix: str) -> None:
-        actionItemPath = self.tstriageFolder / Path(item['path']).with_suffix(suffix).name
-        with actionItemPath.open('w') as f:
-            json.dump(item, f, ensure_ascii=False, indent=True)
-    
-    def LoadActionItem(self, path: Path) -> dict[str, str]:
-        with path.open() as f:
-            return json.load(f)
-    
     def FindTsTriageSettings(self, folder: Path) -> Path:
         settingsPath = folder / 'tstriage.json'
         if settingsPath.exists():
