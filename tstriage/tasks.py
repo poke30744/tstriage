@@ -1,6 +1,7 @@
 from pathlib import Path
 import shutil, logging
 import tempfile
+from typing import Dict
 from tscutter.ffmpeg import InputFile
 from tscutter.analyze import AnalyzeVideo
 import tsmarker.common
@@ -13,17 +14,21 @@ from .pipeline import MarkerMap, EncodePipeline
 
 logger = logging.getLogger('tstriage.tasks')
 
-def Analyze(item, epgStation: EPGStation, quiet: bool):
+def CacheTS(item: Dict[str, str], quiet: bool) -> Path:
     path = Path(item['path'])
-    destination = Path(item['destination'])
-
     if item['cache'] is not None:
         logger.info('Copying TS file to working folder ...')
         cache = Path(item['cache']).expanduser()
         workingPath = cache / path.name
         CopyWithProgress2(path, workingPath, quiet=quiet)
+        return workingPath
     else:
-        workingPath = path
+        return path
+
+def Analyze(item, epgStation: EPGStation, quiet: bool):
+    path = Path(item['path'])
+    destination = Path(item['destination'])
+    workingPath = CacheTS(item, quiet)
 
     logger.info('Analyzing to split ...')
     indexPath = destination / '_metadata' / workingPath.with_suffix('.ptsmap').name
@@ -53,13 +58,9 @@ def Analyze(item, epgStation: EPGStation, quiet: bool):
 
 def Mark(item, epgStation: EPGStation, quiet: bool):
     path = Path(item['path'])
-    cache = Path(item['cache']).expanduser()
     destination = Path(item['destination'])
+    workingPath = CacheTS(item, quiet)
 
-    logger.info('Copying TS file to working folder ...')
-    workingPath = cache / path.name
-    CopyWithProgress2(path, workingPath, quiet=quiet)
-    
     logger.info('Marking ...')
     indexPath = destination / '_metadata' / workingPath.with_suffix('.ptsmap').name
     markerPath = destination / '_metadata' /  workingPath.with_suffix('.markermap').name
@@ -87,25 +88,26 @@ def Mark(item, epgStation: EPGStation, quiet: bool):
             metadataPath = outputFolder.parent
             normalize = True
             logger.info(f'Trying to use metadata in {metadataPath} ...')
-        # generate dataset
-        datasetCsv = workingPath.with_suffix('.csv')
-        df = ensemble.CreateDataset(
-            folder=metadataPath, 
-            csvPath=datasetCsv, 
-            properties=[ 'subtitles', 'position', 'duration', 'duration_prev', 'duration_next', 'logo'],
-            normalize=normalize,
-            quiet=quiet)
-        if df is not None:
-            # train the model using Adaboost
-            dataset = ensemble.LoadDataset(csvPath=datasetCsv)
-            columns = dataset['columns']
-            clf = ensemble.Train(dataset, quiet=quiet)
-            # predict
-            model = clf, columns
-            ensemble.MarkerMap(markerPath, PtsMap(indexPath)).MarkAll(model, normalize=normalize)
-        else:
-            logger.warn(f'No metadata is found in {metadataPath}!')
-            byEnsemble = False
+        with tempfile.TemporaryDirectory(prefix='EnsembleDataSet_') as tmpFolder:
+            # generate dataset
+            datasetCsv = Path(tmpFolder) / workingPath.with_suffix('.csv').name
+            df = ensemble.CreateDataset(
+                folder=metadataPath, 
+                csvPath=datasetCsv, 
+                properties=[ 'subtitles', 'position', 'duration', 'duration_prev', 'duration_next', 'logo'],
+                normalize=normalize,
+                quiet=quiet)
+            if df is not None:
+                # train the model using Adaboost
+                dataset = ensemble.LoadDataset(csvPath=datasetCsv)
+                columns = dataset['columns']
+                clf = ensemble.Train(dataset, quiet=quiet)
+                # predict
+                model = clf, columns
+                ensemble.MarkerMap(markerPath, PtsMap(indexPath)).MarkAll(model, normalize=normalize)
+            else:
+                logger.warn(f'No metadata is found in {metadataPath}!')
+                byEnsemble = False
 
 def Cut(item, quiet: bool):
     path = Path(item['path'])
