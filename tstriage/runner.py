@@ -121,6 +121,7 @@ class Runner:
             except:
                 logger.exception(f'in analyzing "{path}":')
                 path.rename(path.with_suffix('.error'))
+                raise
 
     def Mark(self):
         for path in self.nas.ActionItems('.tomark'):
@@ -135,6 +136,7 @@ class Runner:
             except:
                 logger.exception(f'in marking "{path}":')
                 path.rename(path.with_suffix('.error'))
+                raise
 
     def Cut(self):
         for path in self.nas.ActionItems('.tocut'):
@@ -150,6 +152,7 @@ class Runner:
             except:
                 logger.exception(f'in cutting "{path}":')
                 path.rename(path.with_suffix('.error'))
+                raise
 
     def Encode(self):
         for path in self.nas.ActionItems('.toencode'):
@@ -165,6 +168,7 @@ class Runner:
             except:
                 logger.exception(f'in encoding "{path}":')
                 path.rename(path.with_suffix('.error'))
+                raise
 
     def Confirm(self):
         for path in chain(self.nas.ActionItems('.toencode'), self.nas.ActionItems('.toconfirm'), self.nas.ActionItems('.tocleanup')):
