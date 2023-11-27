@@ -186,8 +186,8 @@ def Encode(item, encoder: str, presets: dict, quiet: bool):
     logger.info('Uploading triage file ...')
     tstriageFolder = path.parent / '_tstriage'
     for p in tstriageFolder.glob('*.*'):
-        if p.stem == path.stem:
-            CopyWithProgress2(p, destination / '_metadata' / p.name, quiet=quiet)
+        if p.stem in path.stem or path.stem in p.stem:
+            CopyWithProgress2(p, destination / '_metadata' / p.stem, quiet=quiet)
 
     return outFile
 
