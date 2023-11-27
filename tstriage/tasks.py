@@ -109,15 +109,10 @@ def Mark(item, epgStation: EPGStation, quiet: bool):
                 logger.warn(f'No metadata is found in {metadataPath}!')
                 byEnsemble = False
 
-def Cut(item, quiet: bool):
-    path = Path(item['path'])
-    cache = Path(item['cache']).expanduser()
+def Cut(item: Dict[str, str], outputFolder: Path, quiet: bool):
     destination = Path(item['destination'])
+    workingPath = CacheTS(item, quiet)
 
-    logger.info('Copying TS file to working folder ...')
-    workingPath = cache / path.name
-    CopyWithProgress2(path, workingPath, quiet=quiet)
-    
     logger.info('Cutting ...')
     indexPath = destination / '_metadata' / workingPath.with_suffix('.ptsmap').name
     markerPath = destination / '_metadata' /  workingPath.with_suffix('.markermap').name
@@ -131,18 +126,16 @@ def Cut(item, quiet: bool):
     else:
         byMethod = 'subtitles'
     logger.info(f'Cutting CMs by {byMethod} ...')
-    markerMap.Cut(videoPath=workingPath, byMethod=byMethod, outputFolder=workingPath.with_suffix(''), quiet=quiet)
+    markerMap.Cut(videoPath=workingPath, byMethod=byMethod, outputFolder=outputFolder, quiet=quiet)
 
-def Confirm(item):
+def Confirm(item: Dict[str, str], outputFolder: Path):
     path = Path(item['path'])
     destination = Path(item['destination'])
-    cache = Path(item['cache']).expanduser()
-    workingPath = cache / path
-    logger.info(f'Marking ground truth for {workingPath.name} ...')
-    cuttedProgramFolder = cache / path.stem
-    markerPath = destination / '_metadata' / (workingPath.stem + '.markermap')
+
+    logger.info(f'Marking ground truth for {path.name} ...')
+    markerPath = destination / '_metadata' / (path.stem + '.markermap')
     indexPath = markerPath.with_suffix('.ptsmap')
-    isReEncodingNeeded = groundtruth.MarkerMap(markerPath, PtsMap(indexPath)).MarkAll(clipsFolder=cuttedProgramFolder)
+    isReEncodingNeeded = groundtruth.MarkerMap(markerPath, PtsMap(indexPath)).MarkAll(clipsFolder=outputFolder)
     if isReEncodingNeeded:
         logger.warning("*** Re-encoding is needed! ***")
     return isReEncodingNeeded
@@ -200,9 +193,10 @@ def Encode(item, encoder: str, presets: dict, quiet: bool):
 
 def Cleanup(item):
     logger.info('Cleaning up ...')
-    cache = Path(item['cache'])
+    files = list(Path(item['cache']).glob('*')) if item['cache'] is not None else []
+    files += list((Path(item['path']).parent / '_tstriage').glob('*'))
     originalPath = Path(item['path'])
-    for path in cache.glob('*'):
+    for path in files:
         if path.stem in originalPath.stem or originalPath.stem in path.stem:
             logger.info(f'removing {path.name} ...')
             if path.is_dir():

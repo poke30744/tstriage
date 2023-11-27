@@ -139,9 +139,10 @@ class Runner:
     def Cut(self):
         for path in self.nas.ActionItems('.tocut'):
             item = self.LoadActionItem(path)
+            outputFolder = path.with_suffix("")
             path = path.rename(path.with_suffix(f'.tocut.{socket.gethostname()}'))
             try:
-                Cut(item=item, quiet=self.quiet)
+                Cut(item=item, outputFolder=outputFolder, quiet=self.quiet)
                 path.unlink()
                 self.CreateActionItem(item, '.toencode')
             except KeyboardInterrupt:
@@ -168,7 +169,8 @@ class Runner:
     def Confirm(self):
         for path in chain(self.nas.ActionItems('.toencode'), self.nas.ActionItems('.toconfirm'), self.nas.ActionItems('.tocleanup')):
             item = self.LoadActionItem(path)
-            reEncodingNeeded = Confirm(item=item)
+            outputFolder = path.with_suffix("")
+            reEncodingNeeded = Confirm(item=item, outputFolder=outputFolder)
             path.unlink()
             if reEncodingNeeded or path.suffix == '.toencode':
                 self.CreateActionItem(item, '.toencode')
@@ -179,7 +181,6 @@ class Runner:
         for path in self.nas.ActionItems('.tocleanup'):
             item = self.LoadActionItem(path)
             Cleanup(item=item)
-            path.unlink()
     
     def Run(self, tasks):
         self.SingleInstanceWait()
