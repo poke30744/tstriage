@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import argparse, json, os, socket
+import shutil
 from itertools import chain
 from pathlib import Path
 import logging
@@ -79,7 +80,7 @@ class Runner:
             item['destination'] = item['destination'].replace('\\', '/')
         return item
     
-    def CreateActionItem(self, item, suffix: str) -> None:
+    def CreateActionItem(self, item, suffix: str) -> Path:
         actionItemPath = self.nas.tstriageFolder / Path(item['path']).with_suffix(suffix).name
         if 'cache' in item:
             del item['cache']
@@ -87,6 +88,7 @@ class Runner:
         item['destination'] = str(Path(item['destination']).relative_to(self.nas.destination))
         with actionItemPath.open('w') as f:
             json.dump(item, f, ensure_ascii=False, indent=True)
+        return actionItemPath
     
     def List(self):
         for path in self.nas.ActionItems('.categorized'):
@@ -161,7 +163,9 @@ class Runner:
             try:
                 encodedFile = Encode(item=item, encoder=self.encoder, presets=self.presets, quiet=self.quiet)
                 path.unlink()
-                self.CreateActionItem(item, '.toconfirm')
+                metadataFolder = Path(item['destination']) / '_metadata'
+                newTriagePath = self.CreateActionItem(item, '.toconfirm')
+                shutil.copy(newTriagePath, metadataFolder / newTriagePath.with_suffix('.toencode').name)
                 self.nas.AddEncodedFile(encodedFile)
             except KeyboardInterrupt:
                 raise

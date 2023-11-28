@@ -152,17 +152,14 @@ def Encode(item, encoder: str, presets: dict, quiet: bool):
     ptsMap = PtsMap(destination / '_metadata' / path.with_suffix('.ptsmap').name)
     markerMap = MarkerMap(destination / '_metadata' /  path.with_suffix('.markermap').name, ptsMap)
 
-    logger.info('Copying TS file to working folder ...')
-    cache = Path(item['cache']).expanduser()
-    workingPath = cache / path.name
-    CopyWithProgress2(path, workingPath, quiet=quiet)
-    
+    workingPath = Path(item['path'])
     outFile = workingPath.with_suffix('.mp4')
     EncodePipeline(
         inFile=workingPath,
         ptsMap=ptsMap,
         markerMap=markerMap,
-        outFile=outFile,
+        outFile=destination / workingPath.with_suffix('.mp4').name,
+        outSubtitles=destination / 'Subtitles',
         byGroup=byGroup,
         splitNum=splitNum,
         preset=presets[presetName],
@@ -171,24 +168,11 @@ def Encode(item, encoder: str, presets: dict, quiet: bool):
         fixAudio=fixAudio,
         noStrip=noStrip,
         quiet=quiet)
-
-    logger.info('Uploading processed files ...')
-    for p in cache.glob('*.*'):
-        if path.stem in p.stem:
-            if p.suffix == '.mp4':
-                CopyWithProgress2(p, destination / p.name, quiet=quiet)
-            elif p.suffix in ('.ass', '.srt'):
-                destName = destination / 'Subtitles' / p.name
-                if destName.suffix == '.srt':
-                    destName = destName.with_suffix('.ssrrtt')
-                CopyWithProgress2(p, destName, quiet=quiet)
-    
-    logger.info('Uploading triage file ...')
-    tstriageFolder = path.parent / '_tstriage'
-    for p in tstriageFolder.glob('*.*'):
-        if p.stem in path.stem or path.stem in p.stem:
-            CopyWithProgress2(p, destination / '_metadata' / p.stem, quiet=quiet)
-
+    srtPath = destination / 'Subtitles' / workingPath.with_suffix('.srt').name
+    if srtPath.exists():
+        newSrtPath = srtPath.with_suffix('.ssrrtt')
+        shutil.copy(srtPath, newSrtPath)
+        srtPath.unlink()
     return outFile
 
 def Cleanup(item):

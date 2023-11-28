@@ -149,7 +149,7 @@ class MarkerMap(tsmarker.common.MarkerMap):
         splittedClips[-1] += programClips
         return splittedClips
 
-def EncodePipeline(inFile: Path, ptsMap: PtsMap, markerMap: MarkerMap, outFile: Path, byGroup: bool, splitNum: int, preset: dict, cropdetect: bool, encoder: str, fixAudio: bool, noStrip: bool, quiet=False):
+def EncodePipeline(inFile: Path, ptsMap: PtsMap, markerMap: MarkerMap, outFile: Path, outSubtitles: Path, byGroup: bool, splitNum: int, preset: dict, cropdetect: bool, encoder: str, fixAudio: bool, noStrip: bool, quiet=False):
     programClips = markerMap.GetProgramClips()
     if splitNum > 1:
         programClipsList = [ MarkerMap.MergeNeighbors(clips) for clips in MarkerMap.SplitClips(programClips, splitNum) ]
@@ -203,7 +203,7 @@ def EncodePipeline(inFile: Path, ptsMap: PtsMap, markerMap: MarkerMap, outFile: 
                 startupinfo = subprocess.STARTUPINFO(wShowWindow=6, dwFlags=subprocess.STARTF_USESHOWWINDOW) if hasattr(subprocess, 'STARTUPINFO') else None
                 creationflags = subprocess.CREATE_NEW_CONSOLE if hasattr(subprocess, 'CREATE_NEW_CONSOLE') else 0
                 subtitlesP = subprocess.Popen(    
-                    f'Caption2AssC.cmd - "{currentOutFile.with_suffix("")}"',
+                    f'Caption2AssC.cmd - "{outSubtitles / currentOutFile.with_suffix("").name}"',
                     stdin=subprocess.PIPE,
                     startupinfo=startupinfo,
                     creationflags=creationflags,
@@ -224,8 +224,9 @@ def EncodePipeline(inFile: Path, ptsMap: PtsMap, markerMap: MarkerMap, outFile: 
                         ptsMap.ExtractClipsPipe(inFile, clips, teeFile, quiet=quiet)
                     
             logger.info('Trying to fix issues in subtitles ...')
+            subtitlesBasePath = Path(f'{outSubtitles / currentOutFile.with_suffix("").name}')
             for suffix in ('.ass', '.srt'):
-                subPath = currentOutFile.with_suffix(suffix)
+                subPath = subtitlesBasePath.with_suffix(suffix)
                 if subPath.exists():
                     subtitles = pysubs2.load(str(subPath), encoding='utf-8')
                     subtitles.save(str(subPath))
@@ -261,6 +262,7 @@ if __name__ == "__main__":
             ptsMap=ptsMap,
             markerMap=markerMap,
             outFile=outputPath,
+            outSubtitles=outputPath.parent,
             byGroup=args.bygroup,
             splitNum=1,
             preset=preset,
