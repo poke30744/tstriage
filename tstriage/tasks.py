@@ -54,7 +54,7 @@ def Analyze(item, epgStation: EPGStation, quiet: bool):
     info = inputFile.GetInfo()
     logoPath = (path.parent / '_tstriage' / f'{epg.Channel()}_{info.width}x{info.height}').with_suffix('.png')
     if not logoPath.exists():
-        ExtractLogoPipeline(inFile=workingPath, ptsMap=PtsMap(indexPath), outFile=logoPath, quiet=quiet)
+        ExtractLogoPipeline(inFile=workingPath, ptsMap=PtsMap(indexPath), outFile=logoPath, maxTimeToExtract=999999, quiet=quiet)
 
 def Mark(item, epgStation: EPGStation, quiet: bool):
     path = Path(item['path'])
