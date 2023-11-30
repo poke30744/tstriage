@@ -29,7 +29,7 @@ class Runner:
                 os.environ['PATH'] = f'{os.environ["PATH"]};{pathToAdd}'
         self.encoder = configuration['Encoder']
         self.presets = configuration['Presets']
-        self.epgStation = EPGStation(url=configuration['EPGStation'], cache=self.cache, recorded=configuration['Uncategoried'])
+        self.epgStation = EPGStation(url=configuration['EPGStation'], recorded=configuration['Uncategoried'])
         self.nas = NAS(
             recorded=Path(self.configuration['Uncategoried']),
             destination=Path(configuration['Destination']))

@@ -6,53 +6,13 @@ import urllib.request, urllib.parse, shutil, json, time, logging, argparse, io
 logger = logging.getLogger('tstriage.epgstation')
 
 class EPGStation:
-    def __init__(self, url: str, cache: Optional[Path]=None, recorded: Optional[Path]=None):
+    def __init__(self, url: str, recorded: Optional[Path]=None):
         self.url = url
-        self.reservesJsonPath = Path('reserves.json') if cache is None else Path(cache).expanduser() / 'reserves.json'
-        self.channelsJsonPath = Path('channels.json') if cache is None else Path(cache).expanduser() / 'channels.json'
-        self._notBusyTill = None
-        self.recorded = recorded
     
-    def LoadReservesList(self) -> dict:
-        if self.reservesJsonPath.exists():
-            lastModifiedTime = datetime.fromtimestamp(self.reservesJsonPath.stat().st_mtime)
-            if datetime.now() - lastModifiedTime > timedelta(hours=8):
-                self.reservesJsonPath.unlink()
-        if not self.reservesJsonPath.exists():
-            with urllib.request.urlopen(f'{self.url}/api/reserves?isHalfWidth=true') as response:
-                with self.reservesJsonPath.open('wb') as f:
-                    shutil.copyfileobj(response, f)
-        with self.reservesJsonPath.open(encoding='utf-8') as f:
-            return json.load(f)['reserves']
-
-    def IsBusy(self, at=None, duration=None) -> bool:
-        at = datetime.now() if at is None else at
-        duration = timedelta(minutes=30) if duration is None else duration    
-        for item in self.LoadReservesList():
-            if not item['isOverlap'] and not item['isSkip']:
-                startAt = datetime.fromtimestamp(item['startAt'] / 1000)
-                endAt = datetime.fromtimestamp(item['endAt'] / 1000)
-                if startAt <= at <= endAt or startAt <= (at + duration) <= endAt:
-                    return True
-        return False
-    
-    def BusyWait(self, granularity=30) -> None:
-        if self._notBusyTill is None or self._notBusyTill < datetime.now():
-            duration = granularity * 2
-            while self.IsBusy(duration=timedelta(seconds=duration)):
-                time.sleep(duration)
-            self._notBusyTill = datetime.now() + timedelta(seconds=granularity)
-
     def GetChannels(self) -> dict:
-        if self.channelsJsonPath.exists():
-            with self.channelsJsonPath.open(encoding='utf8') as f:
-                return json.load(f)
-        else:
-            with urllib.request.urlopen(f'{self.url}/api/channels') as response:
-                channels = json.load(response)
-            with self.channelsJsonPath.open('w', encoding='utf8') as f:
-                json.dump(channels, f)
-            return channels
+        with urllib.request.urlopen(f'{self.url}/api/channels') as response:
+            channels = json.load(response)
+        return channels
 
     def GetEPG(self, path, limit=24) -> Optional[dict]:
         hyphenPos = path.stem.find('-')
@@ -106,9 +66,6 @@ if __name__ == "__main__":
     logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 
     epgStation = EPGStation(url=args.server)
-    if args.command == 'status':
-        print(f'EPGStation busy status: {epgStation.IsBusy()}')
-    elif args.command == 'info':
-        epg = epgStation.GetEPG(path=args.input)
-        channels = epgStation.GetChannels()
-        print(epgStation.GenerateDescription(epg, channels))
+    epg = epgStation.GetEPG(path=args.input)
+    channels = epgStation.GetChannels()
+    print(epgStation.GenerateDescription(epg, channels))
