@@ -61,7 +61,7 @@ class Runner:
                     break
             item = {
                 'path': str(path),
-                'destination': str(destination),
+                'destination': str(destination) if destination is not None else None,
             }
             self.CreateActionItem(item, '.categorized')
 
@@ -71,7 +71,7 @@ class Runner:
         # fix pathes
         item['cache'] = str(self.cache) if self.cache is not None else None
         item['path'] = str(self.nas.recorded / item['path'])
-        item['destination'] = str(self.nas.destination / item['destination'])
+        item['destination'] = (str(self.nas.destination / item['destination'])) if item['destination'] != 'None' else item['destination']
         if os.name == 'nt':
             item['path'] = item['path'].replace('/', '\\')
             item['destination'] = item['destination'].replace('/', '\\')
@@ -85,7 +85,7 @@ class Runner:
         if 'cache' in item:
             del item['cache']
         item['path'] = str(Path(item['path']).relative_to(self.nas.recorded))
-        item['destination'] = str(Path(item['destination']).relative_to(self.nas.destination))
+        item['destination'] = str(Path(item['destination']).relative_to(self.nas.destination)) if item['destination'] is not None else 'None'
         with actionItemPath.open('w') as f:
             json.dump(item, f, ensure_ascii=False, indent=True)
         return actionItemPath
