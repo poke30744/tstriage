@@ -154,12 +154,14 @@ def Encode(item, encoder: str, presets: dict, quiet: bool):
 
     workingPath = Path(item['path'])
     outFile = workingPath.with_suffix('.mp4')
+    outSubtitles = destination / 'Subtitles'
+    outSubtitles.mkdir(parents=True, exist_ok=True)
     EncodePipeline(
         inFile=workingPath,
         ptsMap=ptsMap,
         markerMap=markerMap,
         outFile=destination / workingPath.with_suffix('.mp4').name,
-        outSubtitles=destination / 'Subtitles',
+        outSubtitles=outSubtitles,
         byGroup=byGroup,
         splitNum=splitNum,
         preset=presets[presetName],
@@ -173,6 +175,8 @@ def Encode(item, encoder: str, presets: dict, quiet: bool):
         newSrtPath = srtPath.with_suffix('.ssrrtt')
         shutil.copy(srtPath, newSrtPath)
         srtPath.unlink()
+    else:
+        outSubtitles.rmdir()
     return outFile
 
 def Cleanup(item):
