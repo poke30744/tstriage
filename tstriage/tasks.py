@@ -7,6 +7,7 @@ from tscutter.analyze import AnalyzeVideo
 import tsmarker.common
 from tsmarker import subtitles, logo, clipinfo, ensemble, groundtruth
 from tsmarker.pipeline import PtsMap, ExtractLogoPipeline
+from tsmarker.speech.MarkerMap import PrepareSubtitles
 from .common import CopyWithProgress2
 from .epg import EPG
 from .epgstation import EPGStation
@@ -45,11 +46,7 @@ def Analyze(item, epgStation: EPGStation, quiet: bool):
     epg.OutputDesc(destination / workingPath.with_suffix('.yaml').name)
 
     logger.info('Extracting subtitles ...')
-    with tempfile.TemporaryDirectory(prefix='ExtractSubtitles_') as tmpFolder:
-        for sub in subtitles.Extract(workingPath, Path(tmpFolder)):
-            if sub.suffix == '.ass':
-                CopyWithProgress2(sub, destination / '_metadata' / sub.with_suffix('.ass.original').name, quiet=quiet)
-                break
+    PrepareSubtitles(path, PtsMap(indexPath), quiet=quiet)
     
     info = inputFile.GetInfo()
     logoPath = (path.parent / '_tstriage' / f'{epg.Channel()}_{info.width}x{info.height}').with_suffix('.png')
