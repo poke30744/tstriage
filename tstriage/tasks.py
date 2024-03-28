@@ -174,7 +174,10 @@ def Encode(item, encoder: str, presets: dict, quiet: bool):
         shutil.copy(srtPath, newSrtPath)
         srtPath.unlink()
     else:
-        outSubtitles.rmdir()
+        try:
+            outSubtitles.rmdir()
+        except OSError:
+            pass
     return outFile
 
 def Cleanup(item):
