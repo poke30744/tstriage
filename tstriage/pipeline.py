@@ -19,7 +19,7 @@ class InputFile(ffmpeg.InputFile):
         if fixAudio:
             args += [ 
                 '-af',  'aresample=async=1',
-                '-c:a', 'aac'
+                '-c:a', 'aac', '-ar', '48000', '-ac', '2'
             ]
         else:
             args += [ '-c:a', 'copy' ]
@@ -65,6 +65,7 @@ class InputFile(ffmpeg.InputFile):
         ]
         # TODO: support opt-in encoding audio
         args += [ '-c:a', 'copy', '-bsf:a', 'aac_adtstoasc' ]
+        #args += ['-c:a', 'libvorbis', '-ar', '48000', '-b:a', '192k', '-ac', '2']
         args += [ '-map', '0:v', '-map', '0:a', '-ignore_unknown' ]
         args += [ outPath ]
         return args
