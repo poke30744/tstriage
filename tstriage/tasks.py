@@ -77,22 +77,23 @@ def Mark(item, epgStation: EPGStation, bertService: str, quiet: bool):
     outputFolder = Path(item['destination'])
     byEnsemble = not noEnsemble
     if byEnsemble:
-        # find metadata folder
-        if (outputFolder / '_metadata').exists() and len(list((outputFolder / '_metadata').glob('*.markermap'))) > 5:
-            metadataPath = outputFolder
-            normalize = False
-            logger.info(f'Using metadata in {metadataPath} ...')
-        else:
-            metadataPath = outputFolder.parent
-            normalize = True
-            logger.info(f'Trying to use metadata in {metadataPath} ...')
+        searchFolder = outputFolder.parent.parent
+        normalize = True
+        # # find metadata folder
+        # if (outputFolder / '_metadata').exists() and len(list((outputFolder / '_metadata').glob('*.markermap'))) > 5:
+        #     metadataPath = outputFolder
+        #     normalize = False
+        #     logger.info(f'Using metadata in {metadataPath} ...')
+        # else:
+        #     metadataPath = outputFolder.parent
+        #     normalize = True
+        #     logger.info(f'Trying to use metadata in {metadataPath} ...')
         with tempfile.TemporaryDirectory(prefix='EnsembleDataSet_') as tmpFolder:
             # generate dataset
             datasetCsv = Path(tmpFolder) / workingPath.with_suffix('.csv').name
             df = ensemble.CreateDataset(
-                folder=metadataPath, 
+                folder=searchFolder, 
                 csvPath=datasetCsv, 
-                properties=[ 'subtitles', 'position', 'duration', 'duration_prev', 'duration_next', 'logo'],
                 normalize=normalize,
                 quiet=quiet)
             if df is not None:
@@ -104,7 +105,7 @@ def Mark(item, epgStation: EPGStation, bertService: str, quiet: bool):
                 model = clf, columns
                 ensemble.MarkerMap(markerPath, PtsMap(indexPath)).MarkAll(model, normalize=normalize)
             else:
-                logger.warn(f'No metadata is found in {metadataPath}!')
+                logger.warn(f'No metadata is found in {searchFolder}!')
                 byEnsemble = False
 
 def Cut(item: Dict[str, str], outputFolder: Path, quiet: bool):
