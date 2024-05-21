@@ -8,48 +8,19 @@ class NAS:
         self.recorded = recorded
         self.destination = destination
         self.tstriageFolder = recorded / '_tstriage'
-        self.encodedFilesPath = self.tstriageFolder / 'encodedFiles.txt'
-
-    def __RefreshNAS(self, force: bool=False):
-        if not force:
-            if self.encodedFilesPath.exists():
-                return
-        if not self.tstriageFolder.exists():
-            self.tstriageFolder.mkdir()
-        allVideoFiles: list[Path] = []
+    
+    def SearchUnprocessedFiles(self) -> list[Path]:
+        processedFiles: set[str] = set()
         for path in tqdm(Path(self.destination).glob('**/*'), desc="Loading encoded files"):
             if path.suffix in ('.mp4',) and (path.parent / '_metadata').exists():
-                allVideoFiles.append(path)
-        encodedFiles = []
+                processedFiles.add(path.stem.replace('_trimmed', '').replace('_prog', ''))
+
+        unprocessedFiles: list[Path] = []
         for path in tqdm(Path(self.recorded).glob('*'), desc='loading recorded files'):
             if path.is_file():
-                for p2 in allVideoFiles:
-                    if path.stem in p2.stem or p2.stem in path.stem:
-                        encodedFiles.append(p2.name)
-                        break
-        with self.encodedFilesPath.open('w') as f:
-            json.dump(sorted([str(i) for i in encodedFiles]), f, ensure_ascii=False, indent=True)
-    
-    def EncodedFiles(self) -> list[str]:
-        self.__RefreshNAS()
-        with self.encodedFilesPath.open() as f:
-            return json.load(f)
-
-    def AddEncodedFile(self, path: Path) -> None:
-        encodedFiles = self.EncodedFiles()
-        if not path.name in encodedFiles:
-            encodedFiles.append(path.name)
-            with self.encodedFilesPath.open('w') as f:
-                json.dump(encodedFiles, f, ensure_ascii=False, indent=True)
-
-    def RecordedFiles(self) -> list:
-        return [ path for path in Path(self.recorded).glob('*') if path.suffix in ('.ts', '.m2ts') ]
-
-    def HadBeenEncoded(self, path) -> bool:
-        for encodedFile in self.EncodedFiles():
-            if path.stem in encodedFile:
-                return True
-        return False
+                if not path.stem in processedFiles and path.suffix in ('.ts', '.m2ts'):
+                    unprocessedFiles.append(path)
+        return unprocessedFiles
     
     def ActionItems(self, suffix: Optional[str]=None) -> Generator[Path, None, None]:
         for path in self.tstriageFolder.glob('*.*'):

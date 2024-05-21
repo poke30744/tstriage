@@ -44,9 +44,7 @@ class Runner:
                 process.wait()
 
     def Categorize(self):
-        for path in tqdm(self.nas.RecordedFiles(), desc="Categorizing", disable=self.quiet):
-            if self.nas.HadBeenEncoded(path) or self.nas.HasActionItem(path):
-                continue
+        for path in self.nas.SearchUnprocessedFiles():
             destination = None
             for keyword in sorted(self.epgStation.GetKeywords(), key=len, reverse=True):
                 if unicodedata.normalize('NFKC', keyword) in unicodedata.normalize('NFKC', path.stem):
@@ -166,7 +164,6 @@ class Runner:
                 metadataFolder = Path(item['destination']) / '_metadata'
                 newTriagePath = self.CreateActionItem(item, '.toconfirm')
                 shutil.copy(newTriagePath, metadataFolder / newTriagePath.with_suffix('.toencode').name)
-                self.nas.AddEncodedFile(encodedFile)
             except KeyboardInterrupt:
                 raise
             except:
