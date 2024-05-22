@@ -16,9 +16,9 @@ class NAS:
                 processedFiles.add(path.stem.replace('_trimmed', '').replace('_prog', ''))
 
         unprocessedFiles: list[Path] = []
-        for path in tqdm(Path(self.recorded).glob('*'), desc='loading recorded files'):
+        for path in tqdm(Path(self.recorded).glob('*'), desc='Loading recorded files'):
             if path.is_file():
-                if not path.stem in processedFiles and path.suffix in ('.ts', '.m2ts'):
+                if not path.stem in processedFiles and path.suffix in ('.ts', '.m2ts') and not self.HasActionItem(path):
                     unprocessedFiles.append(path)
         return unprocessedFiles
     
