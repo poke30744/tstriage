@@ -78,35 +78,26 @@ def Mark(item, epgStation: EPGStation, bertService: str, quiet: bool):
     byEnsemble = not noEnsemble
     if byEnsemble:
         searchFolder = outputFolder.parent.parent
-        normalize = True
-        # # find metadata folder
-        # if (outputFolder / '_metadata').exists() and len(list((outputFolder / '_metadata').glob('*.markermap'))) > 5:
-        #     metadataPath = outputFolder
-        #     normalize = False
-        #     logger.info(f'Using metadata in {metadataPath} ...')
-        # else:
-        #     metadataPath = outputFolder.parent
-        #     normalize = True
-        #     logger.info(f'Trying to use metadata in {metadataPath} ...')
-        with tempfile.TemporaryDirectory(prefix='EnsembleDataSet_') as tmpFolder:
-            # generate dataset
-            datasetCsv = Path(tmpFolder) / workingPath.with_suffix('.csv').name
-            df = ensemble.CreateDataset(
-                folder=searchFolder, 
-                csvPath=datasetCsv, 
-                normalize=normalize,
-                quiet=quiet)
-            if df is not None:
-                # train the model using Adaboost
-                dataset = ensemble.LoadDataset(csvPath=datasetCsv)
-                columns = dataset['columns']
-                clf = ensemble.Train(dataset, quiet=quiet)
-                # predict
-                model = clf, columns
-                ensemble.MarkerMap(markerPath, PtsMap(indexPath)).MarkAll(model, normalize=normalize)
-            else:
-                logger.warn(f'No metadata is found in {searchFolder}!')
-                byEnsemble = False
+        normalize = False
+
+        # generate dataset
+        datasetCsv = Path(searchFolder.stem).with_suffix('.csv')
+        df = ensemble.CreateDataset(
+            folder=searchFolder, 
+            csvPath=datasetCsv, 
+            normalize=normalize,
+            quiet=quiet)
+        if df is not None:
+            # train the model
+            dataset = ensemble.LoadDataset(csvPath=datasetCsv)
+            columns = dataset['columns']
+            clf = ensemble.Train(dataset, quiet=quiet)
+            # predict
+            model = clf, columns
+            ensemble.MarkerMap(markerPath, PtsMap(indexPath)).MarkAll(model, normalize=normalize)
+        else:
+            logger.warn(f'No metadata is found in {searchFolder}!')
+            byEnsemble = False
 
 def Cut(item: Dict[str, str], outputFolder: Path, quiet: bool):
     destination = Path(item['destination'])
