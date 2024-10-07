@@ -121,8 +121,9 @@ class EPG:
         newInfo = {
             'name': info['name'],
             'description': info['description'],
-            'extended': { k : v.replace('\r', '') for k, v in copy.deepcopy(info['extended']).items() }
         }
+        if 'extended' in info:
+            newInfo['extended'] = { k : v.replace('\r', '') for k, v in copy.deepcopy(info['extended']).items() }
         for k in info.keys():
             if not k in newInfo:
                 newInfo[k] = info[k]
