@@ -13,7 +13,7 @@ class NAS:
         processedFiles: set[str] = set()
         for path in tqdm(Path(self.destination).glob('**/*'), desc="Loading encoded files"):
             if path.suffix in ('.mp4',) and (path.parent / '_metadata').exists():
-                processedFiles.add(path.stem.replace('_trimmed', '').replace('_prog', ''))
+                processedFiles.add(path.stem.split('_')[0])
 
         unprocessedFiles: list[Path] = []
         for path in tqdm(Path(self.recorded).glob('*'), desc='Loading recorded files'):
