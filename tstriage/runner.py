@@ -192,22 +192,29 @@ class Runner:
 
         logger.info(f'running {tasks} ...')
         for task in tasks:
-            if task == 'categorize':
-                self.Categorize()
-            elif task == 'list':
-                self.List()
-            elif task == 'analyze':
-                self.Analyze()
-            elif task == 'mark':
-                self.Mark()
-            elif task == 'cut':
-                self.Cut()
-            elif task == 'encode':
-                self.Encode()
-            elif task == 'confirm':
-                self.Confirm()
-            elif task == 'cleanup':
-                self.Cleanup()
+            try:
+                if task == 'categorize':
+                    self.Categorize()
+                elif task == 'list':
+                    self.List()
+                elif task == 'analyze':
+                    self.Analyze()
+                elif task == 'mark':
+                    self.Mark()
+                elif task == 'cut':
+                    self.Cut()
+                elif task == 'encode':
+                    self.Encode()
+                elif task == 'confirm':
+                    self.Confirm()
+                elif task == 'cleanup':
+                    self.Cleanup()
+            except KeyboardInterrupt:
+                logger.info('interrupted by user')
+                break
+            except FileNotFoundError:
+                logger.warning(f'File not found during {task} task. Please check the configuration and input files.')
+                continue
 
 def main():
     parser = argparse.ArgumentParser(description='Python script to triage TS files')
