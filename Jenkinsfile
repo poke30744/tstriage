@@ -12,18 +12,19 @@ pipeline {
             agent {
                 docker {
                     label 'linux'
-                    image 'python:3.9.7'
+                    image 'ghcr.io/astral-sh/uv:python3.9-bookworm'
                 }
             }
             steps {
-                sh '''
+                 sh '''
                     git clean -fdx
                     python --version
                     pwd
                     df -h
                     ls -l
+                    uv --version
                 '''
-                sh 'python setup.py sdist bdist_wheel'
+                sh 'uv build --no-cache'
                 stash(name: 'compiled-results', includes: 'dist/*.whl*')
             }
         }
@@ -31,13 +32,19 @@ pipeline {
             agent {
                 docker {
                     label 'linux'
-                    image 'python:3.9.7'
+                    image 'ghcr.io/astral-sh/uv:python3.9-bookworm'
                     args '-e HOME=/var/jenkins_home_tmp --tmpfs /var/jenkins_home_tmp:exec'
                 }
             }
             steps {
                 unstash(name: 'compiled-results')
-                sh 'pip install --extra-index-url https://test.pypi.org/simple/ dist/tstriage-0.1.$BUILD_NUMBER-py3-none-any.whl'
+                sh '''
+                    uv pip install --no-cache \
+                        --target ./test_install \
+                        --extra-index-url https://test.pypi.org/simple \
+                        --index-strategy unsafe-best-match \
+                        dist/tstriage-0.1.$BUILD_NUMBER-py3-none-any.whl
+                '''
             }
         }
         stage('Deploy') {
@@ -47,16 +54,15 @@ pipeline {
             agent {
                 docker {
                     label 'linux'
-                    image 'python:3.9.7'
+                    image 'ghcr.io/astral-sh/uv:python3.9-bookworm'
                     args '-e HOME=/var/jenkins_home_tmp --tmpfs /var/jenkins_home_tmp:exec'
                 }
             }
             steps {
                 unstash(name: 'compiled-results')
                 archiveArtifacts artifacts: 'dist/*.whl', fingerprint: true
-                sh 'pip install twine'
                 withCredentials([usernamePassword(credentialsId: '65ddf05a-75ed-43cd-ab7e-5ac1e6af2526', usernameVariable: 'USERNAME', passwordVariable: 'PASSWORD')]) {
-                    sh 'python -m twine upload -r testpypi dist/* -u $USERNAME -p $PASSWORD'
+                    sh 'uv publish --no-cache --publish-url https://test.pypi.org/legacy/ dist/* -u $USERNAME -p $PASSWORD'
                 }
             }
         }
