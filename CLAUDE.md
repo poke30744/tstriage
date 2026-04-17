@@ -1,0 +1,78 @@
+# CLAUDE.md
+
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+
+## Common Development Commands
+
+### Installation and Setup
+- Install dependencies with uv: `uv pip install -e .` (editable install)
+- Install development dependencies: `uv pip install -e ".[dev]"`
+- Build package: `uv build`
+- Publish to Test PyPI: `uv publish --publish-url https://test.pypi.org/legacy/ dist/*` (requires credentials)
+
+### Testing
+- Run all tests: `pytest tests/`
+- Run a specific test: `pytest tests/test_triage.py::test_GetKeywords`
+- Tests are configured for pytest in `.vscode/settings.json`
+
+### Linting and Formatting
+- No lint/format configuration is present; follow PEP 8.
+- Consider using `ruff check` or `black` if added later.
+
+### Running the Application
+- The entry point is `tstriage.runner:main`, installed as console script `tstriage`.
+- Run with configuration: `tstriage --config tstriage.config.yml --task categorize list analyze mark cut encode confirm cleanup`
+- Individual tasks can be run separately: `--task categorize`, `--task list`, etc.
+
+## High-Level Architecture
+
+### Overview
+tstriage is a batch processing pipeline for MPEG2-TS files recorded from TV broadcasts. It categorizes, cuts, encodes, and moves files from a network storage location to a categorized destination, integrating with EPGStation for metadata.
+
+### Core Modules
+1. **runner** (`tstriage/runner.py`): Main entry point. Parses CLI arguments, loads configuration, and executes tasks via the `Runner` class.
+2. **tasks** (`tstriage/tasks.py`): Implements the individual processing steps: `Analyze`, `Mark`, `Cut`, `Encode`, `Confirm`, `Cleanup`. Each function operates on an action item JSON file.
+3. **nas** (`tstriage/nas.py`): Manages file discovery on network storage. Searches for unprocessed TS files and handles action item files (`.categorized`, `.toanalyze`, etc.) in a `_tstriage` folder.
+4. **epgstation** (`tstriage/epgstation.py`): Client for EPGStation API to fetch channel list, EPG metadata, and recording keywords.
+5. **epg** (`tstriage/epg.py`): Extracts and parses EPG data from TS files using `mirakurun-epgdump`.
+6. **pipeline** (`tstriage/pipeline.py`): Contains `EncodePipeline` and `MarkerMap` extension for encoding and merging clips.
+7. **common** (`tstriage/common.py`): Utilities like `CopyWithProgress` and `WindowsInhibitor`.
+
+### Processing Pipeline
+The pipeline consists of sequential tasks, each producing action items with specific suffixes:
+1. **categorize**: Match unprocessed TS files against EPGStation keywords; create `.categorized` items.
+2. **list**: Convert `.categorized` items to `.toanalyze` using settings from `tstriage.json` in destination folders.
+3. **analyze**: Analyze video silence, extract EPG, subtitles, and logo; create `.tomark`.
+4. **mark**: Use subtitles, clip info, logo, speech, and ensemble models to mark program vs. commercial segments; create `.tocut`.
+5. **cut**: Cut TS file based on marking results; create `.toencode`.
+6. **encode**: Encode cut segments to MP4 using presets; create `.toconfirm`.
+7. **confirm**: Manually verify cuts; create `.tocleanup` or `.toencode` if re‑encoding needed.
+8. **cleanup**: Remove temporary cache files.
+
+### Configuration and Data Files
+- **`tstriage.config.yml`**: Required runtime configuration (paths, encoder, presets, EPGStation URL, BertService, etc.). 
+  - Environment variables are supported using `$VAR_NAME` or `${VAR_NAME}` syntax (e.g., `$HOME/recorded`, `${USERPROFILE}/cache`).
+  - An `Environment` (or `Env`, `environment`, `env`) section can be used to inject environment variables into the process. Values in this section will be set as environment variables (converted to strings). Set a value to `null` to remove an existing environment variable.
+- **`channels.yml`**: Static mapping of service IDs to channel names.
+- **`event.yml`**: Genre and sub‑genre descriptions for EPG metadata.
+- **`tstriage.json`**: Per‑folder settings (optional; defaults provided by `nas.FindTsTriageSettings`).
+
+### External Dependencies
+- **tscutter**: For TS file analysis and cutting.
+- **tsmarker**: For marking program/commercial segments.
+- **PyYAML**: Configuration parsing.
+- **psutil**: Process management for single‑instance locking.
+- **mirakurun-epgdump**: External command to extract EPG from TS.
+- **Caption2Ass**: External command for subtitle conversion (Windows‑only path in pipeline).
+
+### Build and Deployment
+- Package uses `setuptools` with dynamic version from `tstriage.__version__`.
+- CI/CD via Jenkins: builds with `uv`, runs limited tests, publishes to Test PyPI.
+- Version format: `0.1.{BUILD_NUMBER}` from environment variable.
+
+### Notes for Development
+- The code assumes Windows‑style paths but includes cross‑platform adjustments.
+- Cache directory (`Cache` in config) is used for temporary TS copies.
+- The pipeline expects network paths (`\\acepc-gk3\...`) but works with local paths.
+- EPGStation integration requires a running EPGStation instance.
+- Test files reference hard‑coded sample paths; adjust accordingly when running tests.

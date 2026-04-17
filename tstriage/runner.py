@@ -216,6 +216,46 @@ class Runner:
                 logger.warning(f'File not found during {task} task. Please check the configuration and input files.')
                 continue
 
+def _expand_env_vars(obj):
+    """Recursively expand environment variables in configuration values.
+
+    Supports both ${VAR_NAME} and $VAR_NAME syntax.
+    """
+    if isinstance(obj, dict):
+        return {k: _expand_env_vars(v) for k, v in obj.items()}
+    elif isinstance(obj, list):
+        return [_expand_env_vars(v) for v in obj]
+    elif isinstance(obj, str):
+        # Expand environment variables in string
+        return os.path.expandvars(obj)
+    else:
+        return obj
+
+def _inject_env_vars(configuration):
+    """Inject environment variables from configuration.
+
+    Looks for 'Environment', 'Env', or 'environment' section in configuration
+    and sets those key-value pairs as environment variables.
+    """
+    # Try different possible keys for environment section
+    env_section = None
+    for key in ['Environment', 'Env', 'environment', 'env']:
+        if key in configuration:
+            env_section = configuration[key]
+            break
+
+    if env_section and isinstance(env_section, dict):
+        for key, value in env_section.items():
+            if isinstance(value, (str, int, float, bool)):
+                # Convert to string for environment variable
+                os.environ[key] = str(value)
+                logger.debug(f'Set environment variable: {key}={value}')
+            elif value is None:
+                # Remove environment variable if value is None
+                if key in os.environ:
+                    del os.environ[key]
+                    logger.debug(f'Removed environment variable: {key}')
+
 def main():
     parser = argparse.ArgumentParser(description='Python script to triage TS files')
     parser.add_argument('--config', '-c', default='tstriage.config.yml', help='configuration file path')
@@ -229,7 +269,13 @@ def main():
     configurationPath = Path(args.config)
     with configurationPath.open(encoding='utf-8') as f:
         configuration = yaml.safe_load(f)
-    
+
+    # Expand environment variables in configuration
+    configuration = _expand_env_vars(configuration)
+
+    # Inject environment variables from configuration
+    _inject_env_vars(configuration)
+
     runner = Runner(configuration, quiet=args.quiet)
     runner.Run(args.task)
 

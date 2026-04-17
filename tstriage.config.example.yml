@@ -1,0 +1,71 @@
+# tstriage.config.yml - Example with environment variable support
+
+# Paths can use environment variables
+Uncategoried: ${RECORDED_PATH}  # Expands to value of RECORDED_PATH environment variable
+Destination: $DESTINATION_PATH  # Alternative syntax without braces
+Cache: ~/Desktop/workingFolder2  # ~ expands to user home directory
+
+# EPGStation and BertService URLs
+EPGStation: http://acepc-gk3.local:8888
+BertService: http://desktop-m7cl3j1.local:5000
+
+# Path configuration for external tools
+Path:
+  TsSplitter: C:\Software\TsSplitter
+  Caption2Ass: C:\Software\Caption2Ass
+
+# Encoder setting
+Encoder: h264_nvenc
+
+# Environment variables to inject into the process
+# This section sets environment variables for use by tstriage or child processes
+# Supported keys: Environment, Env, environment, env
+Environment:
+  # Set environment variables
+  TSTRIAGE_MODE: production
+  LOG_LEVEL: DEBUG
+  MAX_CONCURRENT_JOBS: 2
+
+  # Values are converted to strings
+  ENABLE_FEATURE_X: true
+  CACHE_SIZE_MB: 1024
+
+  # Use null to remove an existing environment variable
+  # OLD_SETTING: null  # Would remove OLD_SETTING if it exists
+
+  # These can reference other environment variables (expanded during injection)
+  # CUSTOM_PATH: ${HOME}/tstriage/cache
+
+# Presets for encoding
+Presets:
+  drama:
+    videoFilter: bwdif=0
+    bitrate: 2500k
+    maxRate: 5000k
+    crf: 19
+  drama720p:
+    videoFilter: bwdif=0,scale=1280:720
+    bitrate: 1500k
+    maxRate: 3000k
+    crf: 19
+  anime:
+    videoFilter: pullup,fps=24000/1001
+    bitrate: 2500k
+    maxRate: 5000k
+    crf: 19
+  anime720p:
+    videoFilter: pullup,fps=24000/1001,scale=1280:720
+    bitrate: 1500k
+    maxRate: 3000k
+    crf: 19
+  anime480p:
+    videoFilter: pullup,fps=24000/1001,scale=852:480
+    bitrate: 750k
+    maxRate: 1500k
+    crf: 19
+
+# Usage notes:
+# 1. Environment variables in values (${VAR} or $VAR) are expanded when config is loaded
+# 2. The Environment section injects variables into os.environ for the process
+# 3. Set a value to null to remove an existing environment variable
+# 4. All values in Environment section are converted to strings
