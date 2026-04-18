@@ -264,7 +264,8 @@ def main():
 
     args = parser.parse_args()
 
-    logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+    log_level = logging.WARNING if args.quiet else logging.INFO
+    logging.basicConfig(level=log_level, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 
     configurationPath = Path(args.config)
     with configurationPath.open(encoding='utf-8') as f:
