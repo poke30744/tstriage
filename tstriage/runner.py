@@ -249,12 +249,12 @@ def _inject_env_vars(configuration):
             if isinstance(value, (str, int, float, bool)):
                 # Convert to string for environment variable
                 os.environ[key] = str(value)
-                logger.debug(f'Set environment variable: {key}={value}')
+                logger.info(f'Set environment variable: {key}={value}')
             elif value is None:
                 # Remove environment variable if value is None
                 if key in os.environ:
                     del os.environ[key]
-                    logger.debug(f'Removed environment variable: {key}')
+                    logger.info(f'Removed environment variable: {key}')
 
 def main():
     parser = argparse.ArgumentParser(description='Python script to triage TS files')
