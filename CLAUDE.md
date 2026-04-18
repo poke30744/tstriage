@@ -50,7 +50,7 @@ The pipeline consists of sequential tasks, each producing action items with spec
 8. **cleanup**: Remove temporary cache files.
 
 ### Configuration and Data Files
-- **`tstriage.config.yml`**: Required runtime configuration (paths, encoder, presets, EPGStation URL, BertService, etc.). 
+- **`tstriage.config.yml`**: Required runtime configuration (paths, encoder, presets, EPGStation URL, etc.). 
   - Environment variables are supported using `$VAR_NAME` or `${VAR_NAME}` syntax (e.g., `$HOME/recorded`, `${USERPROFILE}/cache`).
   - An `Environment` (or `Env`, `environment`, `env`) section can be used to inject environment variables into the process. Values in this section will be set as environment variables (converted to strings). Set a value to `null` to remove an existing environment variable.
 - **`channels.yml`**: Static mapping of service IDs to channel names.

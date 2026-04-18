@@ -128,7 +128,7 @@ class Runner:
             item = self.LoadActionItem(path)
             path = path.rename(path.with_suffix(f'.tomark.{socket.gethostname()}'))
             try:
-                Mark(item=item, epgStation=self.epgStation, bertService=self.configuration['BertService'], quiet=self.quiet)
+                Mark(item=item, epgStation=self.epgStation, quiet=self.quiet)
                 path.unlink()
                 self.CreateActionItem(item, '.tocut')
             except KeyboardInterrupt:

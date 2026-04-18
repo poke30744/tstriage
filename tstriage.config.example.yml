@@ -5,9 +5,8 @@ Uncategoried: ${RECORDED_PATH}  # Expands to value of RECORDED_PATH environment 
 Destination: $DESTINATION_PATH  # Alternative syntax without braces
 Cache: ~/Desktop/workingFolder2  # ~ expands to user home directory
 
-# EPGStation and BertService URLs
+# EPGStation URL
 EPGStation: http://acepc-gk3.local:8888
-BertService: http://desktop-m7cl3j1.local:5000
 
 # Path configuration for external tools
 Path:

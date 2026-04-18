@@ -53,7 +53,7 @@ def Analyze(item, epgStation: EPGStation, quiet: bool):
     if not logoPath.exists():
         ExtractLogoPipeline(inFile=workingPath, ptsMap=PtsMap(indexPath), outFile=logoPath, maxTimeToExtract=999999, quiet=quiet)
 
-def Mark(item, epgStation: EPGStation, bertService: str, quiet: bool):
+def Mark(item, epgStation: EPGStation, quiet: bool):
     path = Path(item['path'])
     destination = Path(item['destination'])
     workingPath = CacheTS(item, quiet)
@@ -71,7 +71,7 @@ def Mark(item, epgStation: EPGStation, bertService: str, quiet: bool):
     info = inputFile.GetInfo()
     logoPath = (path.parent / '_tstriage' / f'{epg.Channel()}_{info.width}x{info.height}').with_suffix('.png')
     logo.MarkerMap(markerPath, PtsMap(indexPath)).MarkAll(videoPath=workingPath, logoPath=logoPath, quiet=quiet)
-    speech.MarkerMap(markerPath, PtsMap(indexPath)).MarkAll(videoPath=workingPath, apiUrl=bertService + '/api/mark/speech', quiet=quiet)
+    speech.MarkerMap(markerPath, PtsMap(indexPath)).MarkAll(videoPath=workingPath, quiet=quiet)
 
     noEnsemble = item['marker'].get('noEnsemble', False)
     outputFolder = Path(item['destination'])
