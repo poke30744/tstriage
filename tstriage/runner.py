@@ -249,7 +249,7 @@ def _inject_env_vars(configuration):
             if isinstance(value, (str, int, float, bool)):
                 # Convert to string for environment variable
                 os.environ[key] = str(value)
-                logger.info(f'Set environment variable: {key}={value}')
+                logger.info(f'Set environment variable: {key}')
             elif value is None:
                 # Remove environment variable if value is None
                 if key in os.environ:
