@@ -10,7 +10,7 @@ import tsmarker.common
 logger = logging.getLogger('tstriage.pipeline')
 
 class InputFile(ffmpeg.InputFile):
-    def StripTsCmd(self, inFile, outFile, audioLanguages=['jpn'], fixAudio=False, noMap=False):
+    def StripTsCmd(self, inFile, outFile, audioLanguages=['jpn'], fixAudio=False, noMap=False, audio_config=None):
         args = [
             self.ffmpeg, '-hide_banner', '-y',
             '-i', GetShortPath(inFile),
@@ -30,7 +30,7 @@ class InputFile(ffmpeg.InputFile):
         args += [ '-f', 'mpegts', outFile ]
         return args
 
-    def EncodeTsCmd(self, inPath, outPath, preset, encoder, crop=None):
+    def EncodeTsCmd(self, inPath, outPath, preset, encoder, crop=None, audio_config=None, audioLanguages=['jpn']):
         videoFilter = preset['videoFilter']
         if crop:    
             filters = preset['videoFilter'].split(',')
@@ -63,10 +63,40 @@ class InputFile(ffmpeg.InputFile):
             #https://stackoverflow.com/questions/49686244/ffmpeg-too-many-packets-buffered-for-output-stream-01
             #'-max_muxing_queue_size', '1024',
         ]
-        # TODO: support opt-in encoding audio
-        args += [ '-c:a', 'copy', '-bsf:a', 'aac_adtstoasc' ]
-        #args += ['-c:a', 'libvorbis', '-ar', '48000', '-b:a', '192k', '-ac', '2']
-        args += [ '-map', '0:v', '-map', '0:a', '-ignore_unknown' ]
+        # Audio encoding logic
+        has_dual_mono = False
+        sampling_rate = 'N/A'
+        audio_langs = []
+        if audio_config:
+            for audio in audio_config:
+                if audio.get('componentType') == 2:
+                    has_dual_mono = True
+                    sampling_rate = audio.get('samplingRate', 'N/A')
+                    audio_langs = audio.get('langs', [])
+                    logger.info(f'Encoding: Dual mono audio detected, componentType=2, sampling rate: {sampling_rate}Hz, languages: {audio_langs}')
+                    break
+
+        if has_dual_mono:
+            # Dual mono: split stereo into two mono channels and encode to AAC
+            args += ['-filter_complex', '[0:a]channelsplit=channel_layout=stereo[left][right]']
+            args += ['-map', '0:v', '-map', '[left]', '-map', '[right]']
+            # Encode to mono AAC, keep 48kHz sampling rate
+            args += ['-c:a', 'aac', '-ar', '48000', '-ac', '1', '-b:a', '128k']
+            # Set language metadata - use languages from audio config if available
+            for i in range(2):
+                if i < len(audio_langs):
+                    lang = audio_langs[i]
+                elif i < len(audioLanguages):
+                    lang = audioLanguages[i]
+                else:
+                    lang = 'jpn'
+                args += [f'-metadata:s:a:{i}', f'language={lang}']
+            args += ['-bsf:a', 'aac_adtstoasc']
+        else:
+            # Default behavior: copy audio
+            args += [ '-c:a', 'copy', '-bsf:a', 'aac_adtstoasc' ]
+            #args += ['-c:a', 'libvorbis', '-ar', '48000', '-b:a', '192k', '-ac', '2']
+            args += [ '-map', '0:v', '-map', '0:a', '-ignore_unknown' ]
         args += [ outPath ]
         return args
 
@@ -151,6 +181,42 @@ class MarkerMap(tsmarker.common.MarkerMap):
         return splittedClips
 
 def EncodePipeline(inFile: Path, ptsMap: PtsMap, markerMap: MarkerMap, outFile: Path, outSubtitles: Path, byGroup: bool, splitNum: int, preset: dict, cropdetect: bool, encoder: str, fixAudio: bool, noStrip: bool, quiet=False):
+    # Load audio configuration from YAML file
+    audio_config = None
+    yaml_path = outFile.parent / inFile.with_suffix('.yaml').name
+    if yaml_path.exists():
+        try:
+            with open(yaml_path, 'r', encoding='utf-8') as f:
+                metadata = yaml.safe_load(f)
+                if 'audios' in metadata:
+                    audio_config = metadata['audios']
+                    if not isinstance(audio_config, list):
+                        logger.warning(f'audios field is not a list in {yaml_path.name}, ignoring audio config')
+                        audio_config = None
+                    else:
+                        logger.info(f'Loaded audio config from {yaml_path.name}')
+                        # Log audio sampling mode information
+                        for i, audio in enumerate(audio_config):
+                            if not isinstance(audio, dict):
+                                logger.warning(f'Audio track {i} is not a dictionary, skipping')
+                                continue
+                            component_type = audio.get('componentType')
+                            sampling_rate = audio.get('samplingRate', 'N/A')
+                            langs = audio.get('langs', [])
+                            if component_type == 2:
+                                logger.info(f'Audio track {i}: Dual mono (componentType=2), sampling rate: {sampling_rate}Hz, languages: {langs}')
+                            elif component_type == 3:
+                                logger.info(f'Audio track {i}: Normal stereo (componentType=3), sampling rate: {sampling_rate}Hz, languages: {langs}')
+                            else:
+                                logger.info(f'Audio track {i}: Unknown type (componentType={component_type}), sampling rate: {sampling_rate}Hz, languages: {langs}')
+                else:
+                    logger.info(f'No audios field in {yaml_path.name}')
+        except Exception as e:
+            logger.warning(f'Failed to load audio config from {yaml_path}: {e}')
+    else:
+        logger.info(f'YAML file not found: {yaml_path}')
+
+
     programClips = markerMap.GetProgramClips()
     if splitNum > 1:
         programClipsList = [ MarkerMap.MergeNeighbors(clips) for clips in MarkerMap.SplitClips(programClips, splitNum) ]
@@ -198,7 +264,7 @@ def EncodePipeline(inFile: Path, ptsMap: PtsMap, markerMap: MarkerMap, outFile: 
             if currentOutFile.exists():
                 currentOutFile.unlink()
             currentOutFile.touch()
-            encodeTsP = subprocess.Popen(inputFile.EncodeTsCmd('-', GetShortPath(currentOutFile), preset, encoder, cropInfo), stdin=subprocess.PIPE, stderr=encodeLogs)
+            encodeTsP = subprocess.Popen(inputFile.EncodeTsCmd('-', GetShortPath(currentOutFile), preset, encoder, cropInfo, audio_config, ['jpn']), stdin=subprocess.PIPE, stderr=encodeLogs)
             with encodeTsP:    
                 # subtitles
                 startupinfo = subprocess.STARTUPINFO(wShowWindow=6, dwFlags=subprocess.STARTF_USESHOWWINDOW) if hasattr(subprocess, 'STARTUPINFO') else None
@@ -211,7 +277,7 @@ def EncodePipeline(inFile: Path, ptsMap: PtsMap, markerMap: MarkerMap, outFile: 
                     shell=True)
                 if not noStrip:
                     # strip
-                    stripTsP = subprocess.Popen(inputFile.StripTsCmd('-', '-', fixAudio=fixAudio), stdin=subprocess.PIPE, stdout=encodeTsP.stdin, stderr=stripLogs)
+                    stripTsP = subprocess.Popen(inputFile.StripTsCmd('-', '-', audioLanguages=['jpn'], fixAudio=fixAudio, audio_config=audio_config), stdin=subprocess.PIPE, stdout=encodeTsP.stdin, stderr=stripLogs)
                     with stripTsP, subtitlesP:
                         # extract (data pump)
                         teeFile = Tee(outPipes=[stripTsP.stdin, subtitlesP.stdin], couldBeBroken=[subtitlesP.stdin])
