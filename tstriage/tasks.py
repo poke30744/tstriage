@@ -143,6 +143,45 @@ def Encode(item, encoder: str, presets: dict, quiet: bool):
     markerMap = MarkerMap(destination / '_metadata' /  path.with_suffix('.markermap').name, ptsMap)
 
     workingPath = Path(item['path'])
+
+    # Detect audio decode errors
+    import subprocess
+    logger.info('Checking audio streams for decode errors...')
+
+    # Use ffmpeg/ffprobe paths from InputFile (already validated by CheckExtenralCommand)
+    inputFile = InputFile(workingPath)
+    ffmpeg_path = inputFile.ffmpeg
+    ffprobe_path = inputFile.ffprobe
+
+    # First get list of audio streams
+    probe_cmd = [ffprobe_path, '-v', 'error', '-select_streams', 'a',
+                 '-show_entries', 'stream=index', '-of', 'csv=p=0', str(workingPath)]
+    result = subprocess.run(probe_cmd, capture_output=True, text=True, check=True)
+    # Get global indices of audio streams
+    audio_global_indices = list(dict.fromkeys([line.strip() for line in result.stdout.strip().split('\n') if line.strip()]))
+
+    # Test each audio stream by its position in audio stream list (0-based)
+    for audio_pos, global_idx in enumerate(audio_global_indices):
+        # Test each audio stream for decode errors using position index
+        test_cmd = [
+            ffmpeg_path, '-v', 'error', '-err_detect', 'aggressive',
+            '-i', str(workingPath), '-map', f'0:a:{audio_pos}',
+            '-t', '2', '-f', 'null', '-'
+        ]
+        decode_result = subprocess.run(test_cmd, capture_output=True, text=True)
+
+        # Only check for the most likely cause: AAC channel element allocation error
+        # Check for the specific error pattern: "channel element X.X is not allocated"
+        error_lines = []
+        for line in decode_result.stderr.strip().split('\n'):
+            if 'channel element' in line and 'is not allocated' in line:
+                error_lines.append(line)
+
+        if error_lines:
+            logger.warning(f'Audio stream {global_idx} (position {audio_pos}) has decode errors (will cause playback issues):')
+            for line in error_lines:
+                logger.warning(f'  {line}')
+
     outFile = workingPath.with_suffix('.mp4')
     outSubtitles = destination / 'Subtitles'
     outSubtitles.mkdir(parents=True, exist_ok=True)
