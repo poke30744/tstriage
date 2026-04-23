@@ -48,9 +48,21 @@ class InputFile(ffmpeg.InputFile):
                 filters.append(f'scale={scale_w}:{scale_h}')
             videoFilter = ','.join(filters)
         if '_nvenc' in encoder:
-            videoCodec = [ '-c:v', encoder, '-rc:v', 'vbr_hq', '-cq:v', str(preset['crf']), '-b:v', preset['bitrate'], '-maxrate:v', preset['maxRate'], '-profile:v', 'high' ]
-        elif '_videotoolbox' in encoder:
-            videoCodec = [ '-c:v', encoder, '-b:v', preset['bitrate'], '-maxrate:v',  preset['maxRate'] ]
+            # Pure CRF-like mode, similar to x264's -crf experience
+            # Uses only crf for quality control, ignores bitrate and maxRate from config
+            # NVENC CQ requires higher values than x264 CRF for similar file sizes
+            # Based on testing with preset p7: cq 31 ≈ x264 crf 27, so offset is +4
+            nvenc_cq = preset['crf'] + 4
+            videoCodec = [
+                '-c:v', encoder,
+                '-rc:v', 'vbr',          # Use vbr mode (vbr_hq is deprecated)
+                '-cq:v', str(nvenc_cq),  # Constant quality parameter, adjusted for NVENC
+                '-b:v', '0',             # Must be set to 0 to enable true constant quality mode
+                '-profile:v', 'high',
+                '-preset', 'p7',         # Use p7 preset (highest quality)
+                '-tune', 'hq'            # High quality tuning
+                # No -maxrate and -bufsize, fully controlled by -cq:v
+            ]
         else:
             videoCodec = [ '-c:v', encoder, '-crf', str(preset['crf']) ]
         args = [
