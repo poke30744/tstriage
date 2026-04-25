@@ -31,9 +31,9 @@ class InputFile(ffmpeg.InputFile):
         return args
 
     def EncodeTsCmd(self, inPath, outPath, preset, encoder, crop=None, audio_config=None, audioLanguages=['jpn']):
-        videoFilter = preset['videoFilter']
-        if crop:    
-            filters = preset['videoFilter'].split(',')
+        videoFilter = preset.get('videoFilter') or ''
+        if crop:
+            filters = videoFilter.split(',') if videoFilter else []
             w, h, x, y, dar, sar = crop['w'], crop['h'], crop['x'], crop['y'], crop['dar'], crop['sar']
             cropStr = f'crop={w}:{h}:{x}:{y},setdar=dar={dar[0]}/{dar[1]}'
             filters.insert(0, cropStr)
