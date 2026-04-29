@@ -20,7 +20,8 @@ dependencies = [
     "tscutter",
     "tsmarker",
     "PyYAML",
-    "psutil"
+    "psutil",
+    "pywin32; platform_system == 'Windows'",
 ]
 
 [project.scripts]

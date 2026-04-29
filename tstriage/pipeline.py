@@ -276,14 +276,18 @@ def EncodePipeline(inFile: Path, ptsMap: PtsMap, markerMap: MarkerMap, outFile: 
             if currentOutFile.exists():
                 currentOutFile.unlink()
             currentOutFile.touch()
-            encodeTsP = subprocess.Popen(inputFile.EncodeTsCmd('-', GetShortPath(currentOutFile), preset, encoder, cropInfo, audio_config, ['jpn']), stdin=subprocess.PIPE, stderr=encodeLogs)
-            with encodeTsP:    
+            encodeTsP = subprocess.Popen(inputFile.EncodeTsCmd('-', GetShortPath(currentOutFile), preset, encoder, cropInfo, audio_config, ['jpn']), stdin=subprocess.PIPE, stdout=subprocess.DEVNULL, stderr=encodeLogs)
+            with encodeTsP:
                 # subtitles
                 startupinfo = subprocess.STARTUPINFO(wShowWindow=6, dwFlags=subprocess.STARTF_USESHOWWINDOW) if hasattr(subprocess, 'STARTUPINFO') else None
-                creationflags = subprocess.CREATE_NEW_CONSOLE if hasattr(subprocess, 'CREATE_NEW_CONSOLE') else 0
-                subtitlesP = subprocess.Popen(    
+                # CREATE_NO_WINDOW (instead of CREATE_NEW_CONSOLE) keeps the process
+                # in the same console so it receives Ctrl+C together with the parent.
+                creationflags = getattr(subprocess, 'CREATE_NO_WINDOW', 0x08000000)
+                subtitlesP = subprocess.Popen(
                     f'Caption2AssC.cmd - "{outSubtitles / currentOutFile.with_suffix("").name}"',
                     stdin=subprocess.PIPE,
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
                     startupinfo=startupinfo,
                     creationflags=creationflags,
                     shell=True)
