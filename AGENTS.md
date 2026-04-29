@@ -12,7 +12,7 @@ Python package for batch processing MPEG2-TS files. Processes recorded TV stream
 ## Configuration
 - Main config: `tstriage.config.yml` (required for execution)
 - Package data includes: `channels.yml`, `event.yml`
-- Config paths reference external tools: TsSplitter, Caption2Ass
+- Config paths reference external tools: Caption2Ass
 
 ## Architecture Notes
 - Entry point: `tstriage.runner:main`
