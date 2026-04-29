@@ -41,19 +41,19 @@ Presets:
   # (e.g. crf 27 → cq 31). bitrate and maxRate are ignored for NVENC.
   drama:
     videoFilter: bwdif=0
-    crf: 22
+    crf: 24
   drama720p:
     videoFilter: bwdif=0,scale=1280:720
-    crf: 22
+    crf: 24
   anime:
     videoFilter: pullup,fps=24000/1001
-    crf: 22
+    crf: 24
   anime720p:
     videoFilter: pullup,fps=24000/1001,scale=1280:720
-    crf: 22
+    crf: 24
   anime480p:
     videoFilter: pullup,fps=24000/1001,scale=852:480
-    crf: 22
+    crf: 24
 
 # Usage notes:
 # 1. Environment variables in values (${VAR} or $VAR) are expanded when config is loaded
