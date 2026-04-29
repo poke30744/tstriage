@@ -7,7 +7,7 @@ from tscutter.analyze import AnalyzeVideo
 import tsmarker.common
 from tsmarker import subtitles, logo, clipinfo, speech, ensemble, groundtruth
 from tsmarker.pipeline import PtsMap, ExtractLogoPipeline
-from tsmarker.speech.MarkerMap import PrepareSubtitles
+from tsmarker.speech.text_extractor import PrepareSubtitles
 from .common import CopyWithProgress2
 from .epg import EPG
 from .epgstation import EPGStation
