@@ -1,4 +1,3 @@
-import pytest
 import tstriage.epgstation
 
 def test_GetKeywords():

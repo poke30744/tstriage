@@ -1,4 +1,4 @@
-import logging, subprocess, argparse, os, tempfile
+import logging, subprocess, tempfile
 from pathlib import Path
 import pysubs2
 import yaml
@@ -313,43 +313,3 @@ def EncodePipeline(inFile: Path, ptsMap: PtsMap, markerMap: MarkerMap, outFile: 
                 if subPath.exists():
                     subtitles = pysubs2.load(str(subPath), encoding='utf-8')
                     subtitles.save(str(subPath))
-
-if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description='Process TS files in pipeline')
-    subparsers = parser.add_subparsers(required=True, title='subcommands', dest='command')
-
-    subparser = subparsers.add_parser('encode', help='encode marked mpegts file')
-    subparser.add_argument('--input', '-i', required=True, help='input mpegts path')
-    subparser.add_argument('--bygroup', action='store_true', help='extract into groups')
-    subparser.add_argument('--preset', default='drama', help='encoder preset string')
-    subparser.add_argument('--cropdetect', '-c', action='store_true', help='detect and crop still area')
-    subparser.add_argument('--notag', action='store_true', help="don't add tag to output filename")
-
-    args = parser.parse_args()
-
-    logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-
-    os.environ['PATH'] = f'{os.environ["PATH"]};C:\\Software\\Caption2Ass'
-
-    if args.command == 'encode':
-        with Path("tstriage.config.yml").open(encoding='utf-8') as f:
-            configuration = yaml.safe_load(f)
-            encoder = configuration['Encoder']
-            preset = configuration['Presets'][args.preset]
-        inFile = Path(args.input)
-        ptsMap = PtsMap(inFile.parent / '_metadata' / (inFile.stem + '.ptsmap'))
-        markerMap = MarkerMap(inFile.parent / '_metadata' / (inFile.stem + '.markermap'), ptsMap)
-        outputPath = inFile.with_suffix('.mp4') if args.notag else inFile.parent / f'{inFile.stem}_({args.preset}_{encoder}_crf{preset["crf"]}).mp4'
-        EncodePipeline(
-            inFile=inFile,
-            ptsMap=ptsMap,
-            markerMap=markerMap,
-            outFile=outputPath,
-            outSubtitles=outputPath.parent,
-            byGroup=args.bygroup,
-            splitNum=1,
-            preset=preset,
-            cropdetect=args.cropdetect,
-            encoder=encoder,
-            fixAudio=False,
-            noStrip=False)

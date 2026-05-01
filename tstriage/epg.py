@@ -1,5 +1,5 @@
 from functools import cache
-import os, subprocess, json, unicodedata, time, argparse, re, copy
+import os, subprocess, json, unicodedata, time, re, copy
 from typing import Optional
 from pathlib import Path
 import logging
@@ -109,9 +109,6 @@ class EPG:
         return self.inputFile.GetInfo().serviceId
 
     def Channel(self) -> Optional[str]:
-        if self.channels is None:
-            with (Path(__file__).parent / 'channels.yml').open(encoding='utf-8') as f:        
-                self.channels = yaml.load(f, Loader=yaml.FullLoader)
         for item in self.channels:
             if item.get('serviceId') == self.ServiceId():
                 return item['name']
@@ -135,11 +132,3 @@ class EPG:
                     newInfo['duration_desc'] = f'{round(info["duration"] / 1000 / 60)} mins'
         with txtPath.open('w', encoding='utf-8') as f:
             yaml.dump(newInfo, f, encoding='utf-8', allow_unicode=True, sort_keys=False, default_flow_style=False)
-
-if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description='Dump EPG from TS files')
-    parser.add_argument('--input', '-i', required=True, help='input mpegts path')
-    args = parser.parse_args()
-
-    videoPath = Path(args.input)
-    EPG.Dump(videoPath, videoPath.with_suffix('.epg'))

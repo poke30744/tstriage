@@ -35,7 +35,7 @@ packages = ["tstriage"]
 include-package-data = true
 
 [tool.setuptools.package-data]
-tstriage = ["channels.yml", "event.yml"]
+tstriage = ["event.yml"]
 
 [tool.setuptools.dynamic]
 version = {attr = "tstriage.__version__"}

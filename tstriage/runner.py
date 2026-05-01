@@ -7,7 +7,6 @@ import logging
 import unicodedata
 import psutil
 import yaml
-from tqdm import tqdm
 from .epgstation import EPGStation
 from .tasks import Analyze, Mark, Cut, Encode, Confirm, Cleanup
 from .nas import NAS
@@ -29,7 +28,7 @@ class Runner:
                 os.environ['PATH'] = f'{os.environ["PATH"]};{pathToAdd}'
         self.encoder = configuration['Encoder']
         self.presets = configuration['Presets']
-        self.epgStation = EPGStation(url=configuration['EPGStation'], recorded=configuration['Uncategoried'])
+        self.epgStation = EPGStation(url=configuration['EPGStation'])
         self.nas = NAS(
             recorded=Path(self.configuration['Uncategoried']),
             destination=Path(configuration['Destination']))
@@ -159,7 +158,7 @@ class Runner:
             item = self.LoadActionItem(path)
             path = path.rename(path.with_suffix(f'.toencode.{socket.gethostname()}'))
             try:
-                encodedFile = Encode(item=item, encoder=self.encoder, presets=self.presets, quiet=self.quiet)
+                Encode(item=item, encoder=self.encoder, presets=self.presets, quiet=self.quiet)
                 path.unlink()
                 metadataFolder = Path(item['destination']) / '_metadata'
                 newTriagePath = self.CreateActionItem(item, '.toconfirm')

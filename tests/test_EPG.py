@@ -1,4 +1,3 @@
-import pytest
 from pathlib import Path
 from tscutter.ffmpeg import InputFile
 from tstriage.epg import EPG

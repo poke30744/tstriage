@@ -1,6 +1,5 @@
 from pathlib import Path
 import shutil, logging
-import tempfile
 from typing import Dict
 from tscutter.ffmpeg import InputFile
 from tscutter.analyze import AnalyzeVideo

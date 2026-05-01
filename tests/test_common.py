@@ -1,4 +1,3 @@
-import pytest
 from pathlib import Path
 from tscutter.common import PtsMap
 from tstriage.pipeline import MarkerMap

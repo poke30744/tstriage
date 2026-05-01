@@ -1,34 +1,8 @@
 import shutil, logging, subprocess, os
 from pathlib import Path
-from typing import Optional
 from tqdm import tqdm
-from .epgstation import EPGStation
 
 logger = logging.getLogger('tstriage.common')
-
-class WindowsInhibitor:
-    '''Prevent OS sleep/hibernate in windows
-    API documentation:
-    https://msdn.microsoft.com/en-us/library/windows/desktop/aa373208(v=vs.85).aspx'''
-    ES_CONTINUOUS = 0x80000000
-    ES_SYSTEM_REQUIRED = 0x00000001
-    @staticmethod
-    def inhibit():
-        import ctypes
-        logger.info('Preventing Windows from going to sleep')
-        ctypes.windll.kernel32.SetThreadExecutionState(WindowsInhibitor.ES_CONTINUOUS | WindowsInhibitor.ES_SYSTEM_REQUIRED)
-    
-    @staticmethod
-    def uninhibit():
-        import ctypes
-        logger.info('Allowing Windows to go to sleep')
-        ctypes.windll.kernel32.SetThreadExecutionState(WindowsInhibitor.ES_CONTINUOUS)
-    
-    def __enter__(self):
-        WindowsInhibitor.inhibit()
-    
-    def __exit__(self, exc_type, exc_value, traceback):
-        WindowsInhibitor.uninhibit()
 
 def CopyWithProgress2(srcPath: Path, dstPath: Path, quiet=False):
     if os.name == 'nt':
