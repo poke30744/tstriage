@@ -21,7 +21,6 @@ dependencies = [
     "tsmarker",
     "PyYAML",
     "psutil",
-    "pywin32; platform_system == 'Windows'",
 ]
 
 [project.scripts]

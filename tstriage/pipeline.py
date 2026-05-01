@@ -3,7 +3,6 @@ from pathlib import Path
 import pysubs2
 import yaml
 from tscutter import ffmpeg
-from tscutter.common import GetShortPath
 from tsmarker.pipeline import PtsMap, ExtractLogoPipeline, CropDetectPipeline
 import tsmarker.common
 
@@ -13,7 +12,7 @@ class InputFile(ffmpeg.InputFile):
     def StripTsCmd(self, inFile, outFile, audioLanguages=['jpn'], fixAudio=False, noMap=False, audio_config=None):
         args = [
             self.ffmpeg, '-hide_banner', '-y',
-            '-i', GetShortPath(inFile),
+            '-i', str(inFile),
             '-c:v', 'copy'
         ]
         if fixAudio:
@@ -67,7 +66,7 @@ class InputFile(ffmpeg.InputFile):
             videoCodec = [ '-c:v', encoder, '-crf', str(preset['crf']) ]
         args = [
             self.ffmpeg, '-hide_banner', '-y',
-            '-i', GetShortPath(inPath)
+            '-i', str(inPath)
         ]
         if len(videoFilter) > 0:
             args += [ '-vf', videoFilter ]
@@ -276,7 +275,7 @@ def EncodePipeline(inFile: Path, ptsMap: PtsMap, markerMap: MarkerMap, outFile: 
             if currentOutFile.exists():
                 currentOutFile.unlink()
             currentOutFile.touch()
-            encodeTsP = subprocess.Popen(inputFile.EncodeTsCmd('-', GetShortPath(currentOutFile), preset, encoder, cropInfo, audio_config, ['jpn']), stdin=subprocess.PIPE, stdout=subprocess.DEVNULL, stderr=encodeLogs)
+            encodeTsP = subprocess.Popen(inputFile.EncodeTsCmd('-', str(currentOutFile), preset, encoder, cropInfo, audio_config, ['jpn']), stdin=subprocess.PIPE, stdout=subprocess.DEVNULL, stderr=encodeLogs)
             with encodeTsP:
                 # subtitles
                 startupinfo = subprocess.STARTUPINFO(wShowWindow=6, dwFlags=subprocess.STARTF_USESHOWWINDOW) if hasattr(subprocess, 'STARTUPINFO') else None
