@@ -16,6 +16,37 @@ Batch runner to process MPEG2-TS files
 2. Configure `tstriage.config.yml`
 3. Run the pipeline: `tstriage --config tstriage.config.yml --task categorize list analyze mark cut encode confirm cleanup`
 
+## Dependencies
+
+### Runtime
+
+| Tool | Version | Install |
+|---|---|---|
+| Python | ≥3.8 | — |
+| ffmpeg / ffprobe | any recent | `choco install ffmpeg-full` or [gyan.dev](https://www.gyan.dev/ffmpeg/builds/) |
+| Caption2AssC | — | place in `C:\Software\Caption2Ass\` |
+| mirakurun (epgdump) | **3.9.0-rc.4** | `npm install -g mirakurun@3.9.0-rc.4 --omit=dev --ignore-scripts` |
+| Node.js | **18.x** (for mirakurun) | [nvm-windows](https://github.com/coreybutler/nvm-windows): `nvm install 18 && nvm use 18` |
+| EPGStation | any | HTTP accessible (config.yml: `EPGStation: http://...`) |
+
+### Python (via uv)
+
+```
+uv pip install -e .
+```
+
+### Verified Versions (2026-05-02)
+
+```
+Python    3.9.8
+ffmpeg    8.1 (choco ffmpeg-full, gyan.dev build)
+Node.js   18.20.8 (nvm-windows)
+mirakurun 3.9.0-rc.4
+uv        0.11.6
+```
+
+> mirakurun 4.x beta does not support Windows. `3.9.0-rc.4` is the last version that supports Windows and matches the EPGStation Docker image. `--ignore-scripts` skips the Windows service registration (only the epgdump CLI is needed).
+
 ## Per-Folder Settings (`tstriage.json`)
 
 Each destination folder can have a `tstriage.json` to override default behavior. Default:
