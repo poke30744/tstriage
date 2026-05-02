@@ -421,23 +421,27 @@ tsmarker cut --video <ts_path> --index <ptsmap_path>
 
 ### 已消除
 
-| 原函数 | 消除方式 |
-|---|---|
-| `CheckExtenralCommand` | 替换为 `shutil.which()`（标准库） |
-| `CopyPartPipe` | tsmarker 内联 4 行文件读取 |
-| `GetShortPath` | 即将删除的 hack，无需复制 |
-| `FormatTimestamp` | 仅 tscutter 使用，1 份 |
+| 原函数 | 消除方式 | 状态 |
+|---|---|---|
+| `CheckExtenralCommand` | 替换为 `shutil.which()`（标准库） | ✅ 完成 (2026-05-02) |
+| `CopyPartPipe` | tsmarker 内联 4 行文件读取 | ✅ 完成 (2026-05-02) |
+| `GetShortPath` | 已删除的 hack，无需复制 | ✅ 完成 (commit 8ef2a71) |
+| `jsonpath_ng` 依赖 | tscutter GetInfo 改用 `ffmpeg.probe()` + 直接 dict 访问 | ✅ 完成 (2026-05-02) |
+| `FormatTimestamp` | 仅 tscutter 使用，1 份 | 保留 |
 
 ---
 
 ## 四、ffmpeg/ffprobe 封装建议
 
-| 场景 | 推荐方式 | 理由 |
-|---|---|---|
-| ffprobe 查询 (`GetInfo`) | ✅ `ffmpeg-python` 的 `probe()` | 50 行 → 3 行，收益最大 |
-| 简单 ffmpeg 提取 | ✅ `ffmpeg-python` | 语法更干净 |
-| 复杂管道 (stdin 喂数据) | ❌ `subprocess.Popen` | ffmpeg-python 有已知死锁风险 |
-| tstriage 命令行构建 | ❌ 手写 `list[str]` | 需要精确控制参数做多进程编排 |
+| 场景 | 推荐方式 | 理由 | 状态 |
+|---|---|---|---|
+| ffprobe 查询 (`GetInfo`) | ✅ `ffmpeg-python` 的 `probe()` | 50 行 → 3 行，收益最大 | ✅ 已实施 |
+| 简单 ffmpeg 提取 | ✅ `ffmpeg-python` | 语法更干净 | 待采用 |
+| 复杂管道 (stdin 喂数据) | ❌ `subprocess.Popen` | ffmpeg-python 有已知死锁风险 | 保持 |
+| tstriage 命令行构建 | ❌ 手写 `list[str]` | 需要精确控制参数做多进程编排 | 保持 |
+
+> 注：tscutter `GetInfo()` 已替换为 `ffmpeg.probe(path, cmd=ffprobe, show_programs=None)` + 直接 dict 访问。
+> 同时移除了 `jsonpath-ng` 依赖（tscutter pyproject.toml 中 `jsonpath-ng` → `ffmpeg-python`）。
 
 ---
 
@@ -467,27 +471,29 @@ tsmarker cut --video <ts_path> --index <ptsmap_path>
 ## 六、实现顺序
 
 ### Phase 1: tstriage 内联准备
-1. 替换 `CheckExtenralCommand` → `shutil.which()`
-2. 创建本地 `PtsMap` 极简封装 (~5 行)
-3. 创建本地 `MarkerMap` 极简封装 (~30 行)
-4. 重构 `pipeline.py`: 解除 `InputFile` 对 `tscutter.ffmpeg.InputFile` 的继承
+1. ✅ 替换 `CheckExtenralCommand` → `shutil.which()`（tscutter + tstriage 均已替换）
+2. 创建本地 `PtsMap` 极简封装 (~5 行) — **延后**（当前仍从 tscutter/tsmarker 导入）
+3. 创建本地 `MarkerMap` 极简封装 (~30 行) — **已有半成品**（继承 tsmarker.common.MarkerMap）
+4. 重构 `pipeline.py`: 解除 `InputFile` 对 `tscutter.ffmpeg.InputFile` 的继承 — **部分完成**（tscutter InputFile 已用 shutil.which() + ffmpeg-python，但 tstriage pipeline.py 仍继承）
+5. ✅ `CopyPartPipe` 替换为 4 行文件读取（tsmarker/subtitles.py）
+6. ✅ `jsonpath-ng` → `ffmpeg-python` + 直接 dict 访问（tscutter/ffmpeg.py GetInfo）
 
 ### Phase 2: tscutter CLI
-5. 添加 `--shift` 参数到现有 analyze 子命令
-6. 新增 `probe` 子命令 (内部用 `ffmpeg.probe()`)
-7. 新增 `list-clips` 子命令
-8. 新增 `select-clips` 子命令
-9. 新增 `extract-clips` 子命令
+7. 添加 `--shift` 参数到现有 analyze 子命令
+8. 新增 `probe` 子命令 (内部用 `ffmpeg.probe()`)
+9. 新增 `list-clips` 子命令
+10. 新增 `select-clips` 子命令
+11. 新增 `extract-clips` 子命令
 
 ### Phase 3: tsmarker CLI
-10. 统一 CLI 入口框架
-11. 已有 CLI 的: extract-logo, crop-detect, ensemble-dataset/train/predict（统一到子命令，移除 PtsMap 导入改为调 tscutter）
-12. 新增 CLI 的: prepare-subtitles, mark-subtitles, mark-clipinfo, mark-logo, mark-speech, groundtruth, cut
+12. 统一 CLI 入口框架
+13. 已有 CLI 的: extract-logo, crop-detect, ensemble-dataset/train/predict（统一到子命令，移除 PtsMap 导入改为调 tscutter）
+14. 新增 CLI 的: prepare-subtitles, mark-subtitles, mark-clipinfo, mark-logo, mark-speech, groundtruth, cut
 
 ### Phase 4: tstriage 切换
-13. 逐函数切换为 subprocess CLI 调用
-14. 移除 `pyproject.toml` 中的 tscutter/tsmarker 依赖
-15. 运行测试
+15. 逐函数切换为 subprocess CLI 调用
+16. 移除 `pyproject.toml` 中的 tscutter/tsmarker 依赖
+17. 运行测试
 
 ---
 
@@ -497,3 +503,26 @@ tsmarker cut --video <ts_path> --index <ptsmap_path>
 2. tstriage 现有测试 (`tests/`) 在迁移后全部通过
 3. 端到端测试: 取一个样本 TS，完整跑通所有 task
 4. 对比迁移前后 `.ptsmap` 和 `.markermap` 内容一致
+
+---
+
+## 八、实现进度
+
+### 已完成 (2026-05-02)
+
+| 仓库 | 变更 | 文件 |
+|---|---|---|
+| tscutter | `CheckExtenralCommand` → `shutil.which()` | `common.py`, `ffmpeg.py`, `audio.py` |
+| tscutter | 移除 `ProgramNotFound` 异常类 | `common.py` |
+| tscutter | `jsonpath-ng` → `ffmpeg-python` (`GetInfo`) | `ffmpeg.py` |
+| tscutter | 清理未使用 import (`sys`, `subprocess`, `os`, `cache`) | `common.py` |
+| tscutter | `pyproject.toml`: `jsonpath-ng` → `ffmpeg-python` | `pyproject.toml` |
+| tstriage | `CheckExtenralCommand` → `shutil.which()` | `epg.py` |
+| tsmarker | `CopyPartPipe` → 4 行 file read | `subtitles.py` |
+
+### 下一步
+
+1. **tstriage pipeline.py**: 解除 `class InputFile(ffmpeg.InputFile)` 继承，改为使用本地 `shutil.which()` 获取 ffmpeg 路径
+2. **tstriage 本地 PtsMap**: 创建 ~5 行极简封装 (`json.load` + `Clips()`)，减少对 tscutter/tsmarker PtsMap 的依赖
+3. **tstriage 本地 MarkerMap**: 完成 ~30 行极简封装（当前 `pipeline.py::MarkerMap` 仍继承 `tsmarker.common.MarkerMap`）
+4. **Phase 2**: 开始 tscutter CLI 子命令开发 (`probe`, `list-clips`, `select-clips`, `extract-clips`)

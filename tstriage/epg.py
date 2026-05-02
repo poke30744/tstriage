@@ -1,10 +1,10 @@
 from functools import cache
-import os, subprocess, json, unicodedata, time, re, copy
+import os, subprocess, json, unicodedata, time, re, copy, shutil
 from typing import Optional
 from pathlib import Path
 import logging
 import yaml
-from tscutter.common import TsFileNotFound, InvalidTsFormat, CheckExtenralCommand
+from tscutter.common import TsFileNotFound, InvalidTsFormat
 from tscutter.ffmpeg import InputFile
 
 logger = logging.getLogger('tstriage.epg')
@@ -57,10 +57,9 @@ enclosed_characters_convert_table = {
 class EPG:
     @staticmethod
     def Dump(videoPath, epgPath, quiet: bool=False):
-        if os.name == 'nt':
-            CheckExtenralCommand('mirakurun-epgdump.cmd')
-        else:
-            CheckExtenralCommand('mirakurun-epgdump')
+        epgdump = 'mirakurun-epgdump.cmd' if os.name == 'nt' else 'mirakurun-epgdump'
+        if not shutil.which(epgdump):
+            raise RuntimeError(f'{epgdump} not found in $PATH!')
         videoPath = Path(videoPath)
         if not videoPath.is_file():
             raise TsFileNotFound(f'"{videoPath.name}" not found!')
