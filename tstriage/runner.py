@@ -30,8 +30,8 @@ class Runner:
         self.presets = configuration['Presets']
         self.epgStation = EPGStation(url=configuration['EPGStation'])
         self.nas = NAS(
-            recorded=Path(self.configuration['Uncategoried']),
-            destination=Path(configuration['Destination']))
+            recorded=Path(self.configuration['Uncategoried']).expanduser(),
+            destination=Path(configuration['Destination']).expanduser())
     
     # wait for other instances to finish
     def SingleInstanceWait(self):
@@ -78,6 +78,7 @@ class Runner:
         return item
     
     def CreateActionItem(self, item, suffix: str) -> Path:
+        self.nas.tstriageFolder.mkdir(parents=True, exist_ok=True)
         actionItemPath = self.nas.tstriageFolder / Path(item['path']).with_suffix(suffix).name
         if 'cache' in item:
             del item['cache']
