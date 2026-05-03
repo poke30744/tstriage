@@ -21,7 +21,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ### Running the Application
 - The entry point is `tstriage.runner:main`, installed as console script `tstriage`.
-- Run with configuration: `tstriage --config tstriage.config.yml --task categorize list analyze mark cut encode confirm cleanup`
+- **For local development**: Use `uv run python -m tstriage.runner` to run directly from source. The `tstriage` CLI command runs a compiled `.exe` wrapper — source changes are invisible to it until `uv pip install -e .` is re-run to rebuild the wrapper. If in doubt, always prefer `uv run`.
+- Run with configuration: `uv run python -m tstriage.runner --config tstriage.config.yml --task categorize list analyze mark cut encode confirm cleanup`
 - Individual tasks can be run separately: `--task categorize`, `--task list`, etc.
 
 ## High-Level Architecture
@@ -45,7 +46,7 @@ The pipeline consists of sequential tasks, each producing action items with spec
 3. **analyze**: Analyze video silence, extract EPG, subtitles, and logo; create `.tomark`.
 4. **mark**: Use subtitles, clip info, logo, speech, and ensemble models to mark program vs. commercial segments; create `.tocut`.
 5. **cut**: Cut TS file based on marking results; create `.toencode`.
-6. **encode**: Encode cut segments to MP4 using presets; create `.toconfirm`.
+6. **encode**: Encode cut segments to MKV using presets; create `.toconfirm`.
 7. **confirm**: Manually verify cuts; create `.tocleanup` or `.toencode` if re‑encoding needed.
 8. **cleanup**: Remove temporary cache files.
 
