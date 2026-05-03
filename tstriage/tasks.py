@@ -174,14 +174,14 @@ def Encode(item, encoder: str, presets: dict, quiet: bool):
 
     workingPath = Path(item['path'])
 
-    outFile = workingPath.with_suffix('.mp4')
+    outFile = workingPath.with_suffix('.mkv')
     outSubtitles = destination / 'Subtitles'
     outSubtitles.mkdir(parents=True, exist_ok=True)
     EncodePipeline(
         inFile=workingPath,
         ptsMap=ptsMap,
         markerMap=markerMap,
-        outFile=destination / workingPath.with_suffix('.mp4').name,
+        outFile=destination / workingPath.with_suffix('.mkv').name,
         outSubtitles=outSubtitles,
         byGroup=byGroup,
         splitNum=splitNum,
