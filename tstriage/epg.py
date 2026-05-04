@@ -1,11 +1,9 @@
 from functools import cache
 import os, subprocess, json, unicodedata, time, re, copy, shutil
-from typing import Optional
 from pathlib import Path
+from typing import Optional
 import logging
 import yaml
-from tscutter.common import TsFileNotFound, InvalidTsFormat
-from tscutter.ffmpeg import InputFile
 
 logger = logging.getLogger('tstriage.epg')
 
@@ -62,7 +60,7 @@ class EPG:
             raise RuntimeError(f'{epgdump} not found in $PATH!')
         videoPath = Path(videoPath)
         if not videoPath.is_file():
-            raise TsFileNotFound(f'"{videoPath.name}" not found!')
+            raise FileNotFoundError(f'"{videoPath.name}" not found!')
         videoPath = Path(videoPath)
         if os.name == 'nt':
             dumpCmd = f'mirakurun-epgdump.cmd "{videoPath}" "{epgPath}"'
@@ -73,13 +71,13 @@ class EPG:
         else:
             subprocess.run(dumpCmd)
 
-    def __init__(self, path: Path, inputFile: InputFile, channels: Optional[dict]=None) -> None:
+    def __init__(self, path: Path, service_id: int, channels: Optional[dict]=None) -> None:
         self.path = path
-        self.inputFile = inputFile
+        self._service_id = service_id
         with self.path.open(encoding='utf-8') as f:
             self.epg = json.load(f)
         self.channels = channels
-    
+
     def Info(self) -> dict:
         if hasattr(self, 'info'):
             return self.info
@@ -99,13 +97,13 @@ class EPG:
                         info[k] = item[k]
                     break
         if info == {}:
-            raise InvalidTsFormat(f'"{self.path.name}" is invalid!')
+            raise RuntimeError(f'"{self.path.name}" is invalid!')
         self.info = info
         return self.info
 
     @cache
     def ServiceId(self) -> int:
-        return self.inputFile.GetInfo().serviceId
+        return self._service_id
 
     def Channel(self) -> Optional[str]:
         for item in self.channels:

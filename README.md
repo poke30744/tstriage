@@ -7,8 +7,9 @@ Batch runner to process MPEG2-TS files
 - Integration with EPGStation for metadata extraction
 - Automatic categorization based on EPG keywords
 - Commercial detection and removal using multiple analysis methods
-- Video encoding with configurable presets
-- **Audio processing**: Support for dual mono audio tracks (デュアルモノ) with automatic channel splitting when `componentType=2` is detected in YAML metadata files
+- Video encoding with configurable presets (x264, NVENC)
+- **Audio processing**: Support for dual mono audio tracks with automatic channel splitting
+- **CLI-based architecture**: All tscutter/tsmarker calls are subprocess CLI invocations — zero Python import dependency
 
 ## Quick Start
 
@@ -16,66 +17,84 @@ Batch runner to process MPEG2-TS files
 2. Configure `tstriage.config.yml`
 3. Run the pipeline: `tstriage --config tstriage.config.yml --task categorize list analyze mark cut encode confirm cleanup`
 
+## Configuration
+
+### `tstriage.config.yml`
+
+```yaml
+Cli:                    # CLI command paths (optional, defaults to PATH)
+  tscutter: uv run --directory C:/repos/tscutter tscutter
+  tsmarker: uv run --directory C:/repos/tsmarker tsmarker
+Uncategoried: ~/recorded
+Destination: ~/categorized
+EPGStation: http://localhost:8888
+Encoder: h264_nvenc
+Presets:
+  anime:
+    videoFilter: pullup,fps=24000/1001
+    crf: 24
+Environment:            # Injected as env vars for subprocesses
+  OPENAI_API_KEY: sk-...
+  OPENAI_API_BASE: https://api.deepseek.com
+  OPENAI_MODEL: deepseek-v4-flash
+```
+
+### `Cli` section
+
+Defines the commands used to invoke tscutter and tsmarker. If omitted, defaults to `tscutter` and `tsmarker` on PATH.
+
+For local development with editable repos:
+```yaml
+Cli:
+  tscutter: uv run --directory C:/repos/tscutter tscutter
+  tsmarker: uv run --directory C:/repos/tsmarker tsmarker
+```
+
+### `Environment` section
+
+Key-value pairs injected as environment variables before running any task. Used by tsmarker speech marking (LLM API keys) and other subprocesses.
+
 ## Dependencies
 
 ### Runtime
 
-| Tool | Version | Install |
-|---|---|---|
-| Python | ≥3.8 | — |
-| ffmpeg / ffprobe | any recent | `choco install ffmpeg-full` or [gyan.dev](https://www.gyan.dev/ffmpeg/builds/) |
-| Caption2AssC | — | place in `C:\Software\Caption2Ass\` |
-| mirakurun (epgdump) | **3.9.0-rc.4** | `npm install -g mirakurun@3.9.0-rc.4 --omit=dev --ignore-scripts` |
-| Node.js | **18.x** (for mirakurun) | [nvm-windows](https://github.com/coreybutler/nvm-windows): `nvm install 18 && nvm use 18` |
-| EPGStation | any | HTTP accessible (config.yml: `EPGStation: http://...`) |
+| Tool | Purpose |
+|---|---|
+| Python | ≥3.13 |
+| ffmpeg / ffprobe | Video encode, probe, audio check |
+| ffmpeg5 | Scene change detection (tscutter analyze) |
+| Caption2AssC | Subtitle extraction |
+| mirakurun-epgdump | EPG data extraction from TS |
+| EPGStation | HTTP metadata source |
 
-### Python (via uv)
+### Python
 
 ```
 uv pip install -e .
 ```
 
-### Verified Versions (2026-05-02)
-
-```
-Python    3.9.8
-ffmpeg    8.1 (choco ffmpeg-full, gyan.dev build)
-Node.js   18.20.8 (nvm-windows)
-mirakurun 3.9.0-rc.4
-uv        0.11.6
-```
-
-> mirakurun 4.x beta does not support Windows. `3.9.0-rc.4` is the last version that supports Windows and matches the EPGStation Docker image. `--ignore-scripts` skips the Windows service registration (only the epgdump CLI is needed).
+Key packages: tscutter, tsmarker, ffmpeg-python, PyYAML, psutil, pysubs2.
 
 ## Per-Folder Settings (`tstriage.json`)
 
-Each destination folder can have a `tstriage.json` to override default behavior. Default:
-
 ```json
 {
-  "marker": {
-    "noEnsemble": true
-  },
-  "encoder": {
-    "preset": "drama"
-  }
+  "marker": {"noEnsemble": true},
+  "encoder": {"preset": "drama"}
 }
 ```
 
-### Encoder options
-
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
-| `preset` | string | `"drama"` | Encode preset name, matches a key under `Presets` in `tstriage.config.yml` |
-| `bygroup` | bool | `false` | When `true`, each merged clip group is encoded to a separate MP4 instead of merging all clips into one |
-| `split` | int | `1` | Split program clips into N roughly equal-duration groups, outputting N MP4 files |
-| `cropdetect` | bool | — | Detect and crop still areas (logo/pillarbox removal) |
-| `fixaudio` | bool | — | Apply `aresample=async=1` audio fix (set automatically by analyze phase if decode errors detected) |
-| `nostrip` | bool | — | Skip the intermediate strip step (encode directly from source) |
-
-When `bygroup` or `split` results in multiple output files, they are named `<stem>_0.mp4`, `<stem>_1.mp4`, etc.
+| `preset` | string | `"drama"` | Encode preset name |
+| `bygroup` | bool | `false` | Each clip group → separate MKV |
+| `split` | int | `1` | Split into N output files |
+| `cropdetect` | bool | — | Logo/pillarbox crop detection |
+| `fixaudio` | bool | — | Audio resample fix (auto-set by analyze) |
+| `nostrip` | bool | — | Skip strip step, encode directly |
 
 ## Documentation
 
-- [CLAUDE.md](CLAUDE.md) - Development guide and architecture overview
-- [AUDIO_PROCESSING.md](AUDIO_PROCESSING.md) - Detailed audio processing documentation
+- [CLAUDE.md](CLAUDE.md) - Development guide and architecture
+- [CLI_DESIGN.md](CLI_DESIGN.md) - CLI decoupling design and progress
+- [AUDIO_PROCESSING.md](AUDIO_PROCESSING.md) - Audio processing details

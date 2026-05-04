@@ -1,166 +1,193 @@
+import json, logging, shutil, subprocess
 from pathlib import Path
-import shutil, logging
-from typing import Dict
-from tscutter.ffmpeg import InputFile
-from tscutter.analyze import AnalyzeVideo
-import tsmarker.common
-from tsmarker import subtitles, logo, clipinfo, speech, ensemble, groundtruth
-from tsmarker.pipeline import PtsMap, ExtractLogoPipeline
-from tsmarker.speech.text_extractor import PrepareSubtitles
-from .common import CopyWithProgress2
+from typing import Any
+
+from . import cli_config
 from .epg import EPG
 from .epgstation import EPGStation
-from .pipeline import MarkerMap, EncodePipeline
+from .pipeline import EncodePipeline
+from .subprocess_utils import run, run_json
 
 logger = logging.getLogger('tstriage.tasks')
 
-def CacheTS(item: Dict[str, str], quiet: bool) -> Path:
-    path = Path(item['path'])
-    if item['cache'] is not None:
-        logger.info('Copying TS file to working folder ...')
-        cache = Path(item['cache']).expanduser()
-        workingPath = cache / path.name
-        CopyWithProgress2(path, workingPath, quiet=quiet)
-        return workingPath
-    else:
-        return path
 
-def Analyze(item, epgStation: EPGStation, quiet: bool):
+def _q(quiet: bool) -> list[str]:
+    return ['--quiet'] if quiet else []
+
+
+def Analyze(item: dict[str, Any], epgStation: EPGStation, quiet: bool):
     path = Path(item['path'])
     destination = Path(item['destination'])
-    workingPath = CacheTS(item, quiet)
+    workingPath = Path(item['path'])
 
     logger.info('Analyzing to split ...')
     indexPath = destination / '_metadata' / workingPath.with_suffix('.ptsmap').name
+
     minSilenceLen = item.get('cutter', {}).get('minSilenceLen', 800)
-    silenceThresh =  item.get('cutter', {}).get('silenceThresh', -80)
+    silenceThresh = item.get('cutter', {}).get('silenceThresh', -80)
     splitPosShift = item.get('cutter', {}).get('splitPosShift', 1)
-    inputFile = InputFile(workingPath)
-    AnalyzeVideo(inputFile=inputFile, indexPath=indexPath, silenceThresh=silenceThresh, minSilenceLen=minSilenceLen, splitPosShift=splitPosShift, quiet=quiet)
+
+    result = run(cli_config.tscutter(
+        *_q(quiet), 'analyze',
+        '--input', str(workingPath),
+        '--output', str(indexPath),
+        '--length', str(minSilenceLen),
+        '--threshold', str(silenceThresh),
+        '--shift', str(splitPosShift),
+    ))
+    if result.returncode != 0:
+        raise RuntimeError(f'tscutter analyze failed: {result.stderr}')
 
     logger.info('Extracting EPG ...')
     epgPath = destination / '_metadata' / workingPath.with_suffix('.epg').name
     EPG.Dump(workingPath, epgPath, quiet=quiet)
-    epg = EPG(epgPath, inputFile,  epgStation.GetChannels())
+
+    probe_data = run_json(cli_config.tscutter(*_q(quiet), 'probe', '--input', str(workingPath)))
+    if probe_data is None:
+        raise RuntimeError('tscutter probe failed')
+
+    epg = EPG(epgPath, probe_data['serviceId'], epgStation.GetChannels())
     epg.OutputDesc(destination / workingPath.with_suffix('.yaml').name)
 
     logger.info('Extracting subtitles ...')
-    PrepareSubtitles(path, PtsMap(indexPath), quiet=quiet)
-    
-    info = inputFile.GetInfo()
-    logoPath = (path.parent / '_tstriage' / f'{epg.Channel()}_{info.width}x{info.height}').with_suffix('.png')
+    run(cli_config.tsmarker(
+        *_q(quiet), 'prepare-subtitles',
+        '--input', str(workingPath),
+        '--index', str(indexPath),
+    ))
+
+    logoPath = (path.parent / '_tstriage' / f'{epg.Channel()}_{probe_data["width"]}x{probe_data["height"]}').with_suffix('.png')
     if not logoPath.exists():
-        ExtractLogoPipeline(inFile=workingPath, ptsMap=PtsMap(indexPath), outFile=logoPath, maxTimeToExtract=999999, quiet=quiet)
+        run(cli_config.tsmarker(
+            *_q(quiet), 'extract-logo',
+            '--input', str(workingPath),
+            '--index', str(indexPath),
+            '--output', str(logoPath),
+            '--max-time', '999999',
+        ))
 
-    # Detect audio decode errors and flag for fix in encode phase
-    import subprocess
     logger.info('Checking audio streams for decode errors...')
+    ffmpeg_path = 'ffmpeg'
+    ffprobe_path = 'ffprobe'
 
-    ffmpeg_path = inputFile.ffmpeg
-    ffprobe_path = inputFile.ffprobe
-
-    probe_cmd = [ffprobe_path, '-v', 'error', '-select_streams', 'a',
-                 '-show_entries', 'stream=index', '-of', 'csv=p=0', str(workingPath)]
-    result = subprocess.run(probe_cmd, capture_output=True, text=True, check=True)
+    result = subprocess.run(
+        [ffprobe_path, '-v', 'error', '-select_streams', 'a',
+         '-show_entries', 'stream=index', '-of', 'csv=p=0', str(workingPath)],
+        capture_output=True, text=True, check=True)
     audio_global_indices = list(dict.fromkeys([line.strip() for line in result.stdout.strip().split('\n') if line.strip()]))
 
     for audio_pos, global_idx in enumerate(audio_global_indices):
-        test_cmd = [
-            ffmpeg_path, '-v', 'error', '-err_detect', 'aggressive',
-            '-i', str(workingPath), '-map', f'0:a:{audio_pos}',
-            '-t', '2', '-f', 'null', '-'
-        ]
-        decode_result = subprocess.run(test_cmd, capture_output=True, text=True)
+        decode_result = subprocess.run(
+            [ffmpeg_path, '-v', 'error', '-err_detect', 'aggressive',
+             '-i', str(workingPath), '-map', f'0:a:{audio_pos}',
+             '-t', '2', '-f', 'null', '-'],
+            capture_output=True, text=True)
 
-        error_lines = []
-        for line in decode_result.stderr.strip().split('\n'):
-            if 'channel element' in line and 'is not allocated' in line:
-                error_lines.append(line)
-
+        error_lines = [line for line in decode_result.stderr.strip().split('\n')
+                       if 'channel element' in line and 'is not allocated' in line]
         if error_lines:
-            logger.warning(f'Audio stream {global_idx} (position {audio_pos}) has decode errors (will cause playback issues):')
+            logger.warning(f'Audio stream {global_idx} (position {audio_pos}) has decode errors:')
             for line in error_lines:
                 logger.warning(f'  {line}')
             item['encoder']['fixaudio'] = True
 
-def Mark(item, epgStation: EPGStation, quiet: bool):
+
+def Mark(item: dict[str, Any], epgStation: EPGStation, quiet: bool):
     path = Path(item['path'])
     destination = Path(item['destination'])
-    workingPath = CacheTS(item, quiet)
+    workingPath = Path(item['path'])
 
     logger.info('Marking ...')
     indexPath = destination / '_metadata' / workingPath.with_suffix('.ptsmap').name
-    markerPath = destination / '_metadata' /  workingPath.with_suffix('.markermap').name
+    markerPath = destination / '_metadata' / workingPath.with_suffix('.markermap').name
+
     if markerPath.exists() and indexPath.stat().st_mtime > markerPath.stat().st_mtime:
-         logger.warn(f'removing {markerPath} ...')
-         markerPath.unlink()
-    subtitles.MarkerMap(markerPath, PtsMap(indexPath)).MarkAll(videoPath=workingPath, assPath=destination / '_metadata' / path.with_suffix('.ass.original').name)
-    clipinfo.MarkerMap(markerPath, PtsMap(indexPath)).MarkAll(videoPath=workingPath, quiet=quiet)
-    inputFile = InputFile(workingPath)
-    epg = EPG(destination / '_metadata' / path.with_suffix('.epg').name, inputFile, epgStation.GetChannels())
-    info = inputFile.GetInfo()
-    logoPath = (path.parent / '_tstriage' / f'{epg.Channel()}_{info.width}x{info.height}').with_suffix('.png')
-    logo.MarkerMap(markerPath, PtsMap(indexPath)).MarkAll(videoPath=workingPath, logoPath=logoPath, quiet=quiet)
-    speech.MarkerMap(markerPath, PtsMap(indexPath)).MarkAll(videoPath=workingPath, quiet=quiet)
+        logger.warning(f'removing {markerPath} ...')
+        markerPath.unlink()
 
-    noEnsemble = item['marker'].get('noEnsemble', False)
+    probe_data = run_json(cli_config.tscutter('probe', '--input', str(workingPath)))
+    if probe_data is None:
+        raise RuntimeError('tscutter probe failed in mark task')
+    epgPath = destination / '_metadata' / workingPath.with_suffix('.epg').name
+    epg = EPG(epgPath, probe_data['serviceId'], epgStation.GetChannels())
+    logoPath = (path.parent / '_tstriage' / f'{epg.Channel()}_{probe_data["width"]}x{probe_data["height"]}').with_suffix('.png')
+
+    run(cli_config.tsmarker(
+        *_q(quiet), 'mark',
+        '--method', 'subtitles', 'clipinfo', 'logo', 'speech',
+        '--input', str(workingPath),
+        '--index', str(indexPath),
+        '--marker', str(markerPath),
+        '--logo', str(logoPath),
+    ))
+
+    noEnsemble = item.get('marker', {}).get('noEnsemble', False)
     outputFolder = Path(item['destination'])
-    byEnsemble = not noEnsemble
-    if byEnsemble:
+    if not noEnsemble:
         searchFolder = outputFolder.parent.parent
-        normalize = False
-
-        # generate dataset
         datasetCsv = Path(searchFolder.stem).with_suffix('.csv')
-        df = ensemble.CreateDataset(
-            folder=searchFolder, 
-            csvPath=datasetCsv, 
-            normalize=normalize,
-            quiet=quiet)
-        if df is not None:
-            # train the model
-            dataset = ensemble.LoadDataset(csvPath=datasetCsv)
-            columns = dataset['columns']
-            clf = ensemble.Train(dataset, quiet=quiet)
-            # predict
-            model = clf, columns
-            ensemble.MarkerMap(markerPath, PtsMap(indexPath)).MarkAll(model, normalize=normalize)
-        else:
-            logger.warn(f'No metadata is found in {searchFolder}!')
-            byEnsemble = False
 
-def Cut(item: Dict[str, str], outputFolder: Path, quiet: bool):
+        ds_result = run(cli_config.tsmarker(
+            *_q(quiet), 'ensemble-dataset',
+            '--input', str(searchFolder),
+            '--output', str(datasetCsv),
+        ))
+
+        if 'No metadata' not in ds_result.stderr and 'warning' not in ds_result.stderr.lower():
+            modelPath = datasetCsv.with_suffix('.pkl')
+            run(cli_config.tsmarker(
+                *_q(quiet), 'ensemble-train',
+                '--input', str(datasetCsv),
+                '--output', str(modelPath),
+            ))
+            run(cli_config.tsmarker(
+                *_q(quiet), 'ensemble-predict',
+                '--model', str(modelPath),
+                '--index', str(indexPath),
+                '--marker', str(markerPath),
+            ))
+
+
+def Cut(item: dict[str, str], outputFolder: Path, quiet: bool):
     destination = Path(item['destination'])
-    workingPath = CacheTS(item, quiet)
+    workingPath = Path(item['path'])
 
     logger.info('Cutting ...')
     indexPath = destination / '_metadata' / workingPath.with_suffix('.ptsmap').name
-    markerPath = destination / '_metadata' /  workingPath.with_suffix('.markermap').name
-    markerMap = tsmarker.common.MarkerMap(markerPath, PtsMap(indexPath))
+    markerPath = destination / '_metadata' / workingPath.with_suffix('.markermap').name
 
-    # cut the video by marking result for review
-    if '_groundtruth' in markerMap.Properties():
-        byMethod = '_groundtruth'
-    elif '_ensemble' in markerMap.Properties():
-        byMethod = '_ensemble'
-    else:
-        byMethod = 'subtitles'
-    logger.info(f'Cutting CMs by {byMethod} ...')
-    markerMap.Cut(videoPath=workingPath, byMethod=byMethod, outputFolder=outputFolder, quiet=quiet)
+    run(cli_config.tsmarker(
+        *_q(quiet), 'cut',
+        '--input', str(workingPath),
+        '--index', str(indexPath),
+        '--marker', str(markerPath),
+        '--output', str(outputFolder),
+    ))
 
-def Confirm(item: Dict[str, str], outputFolder: Path):
+
+def Confirm(item: dict[str, str], outputFolder: Path):
     path = Path(item['path'])
     destination = Path(item['destination'])
 
     logger.info(f'Marking ground truth for {path.name} ...')
     markerPath = destination / '_metadata' / (path.stem + '.markermap')
     indexPath = markerPath.with_suffix('.ptsmap')
-    isReEncodingNeeded = groundtruth.MarkerMap(markerPath, PtsMap(indexPath)).MarkAll(clipsFolder=outputFolder)
+
+    result = run(cli_config.tsmarker(
+        'groundtruth',
+        '--input', str(path),
+        '--index', str(indexPath),
+        '--marker', str(markerPath),
+        '--clips', str(outputFolder),
+    ))
+    re_encode = json.loads(result.stdout.strip()) if result.stdout.strip() else {'re_encode_needed': False}
+    isReEncodingNeeded = re_encode.get('re_encode_needed', False)
     if isReEncodingNeeded:
         logger.warning("*** Re-encoding is needed! ***")
     return isReEncodingNeeded
 
-def Encode(item, encoder: str, presets: dict, quiet: bool):
+
+def Encode(item: dict[str, Any], encoder: str, presets: dict, quiet: bool):
     path = Path(item['path'])
     destination = Path(item['destination'])
     byGroup = item.get('encoder', {}).get('bygroup', False)
@@ -169,19 +196,22 @@ def Encode(item, encoder: str, presets: dict, quiet: bool):
     cropdetect = item['encoder'].get('cropdetect')
     fixAudio = item['encoder'].get('fixaudio')
     noStrip = item['encoder'].get('nostrip')
-    ptsMap = PtsMap(destination / '_metadata' / path.with_suffix('.ptsmap').name)
-    markerMap = MarkerMap(destination / '_metadata' /  path.with_suffix('.markermap').name, ptsMap)
 
     workingPath = Path(item['path'])
 
-    outFile = workingPath.with_suffix('.mkv')
+    ptsmap_path = destination / '_metadata' / path.with_suffix('.ptsmap').name
+    markermap_path = destination / '_metadata' / path.with_suffix('.markermap').name
+
     outSubtitles = destination / 'Subtitles'
     outSubtitles.mkdir(parents=True, exist_ok=True)
+
+    outFile = destination / workingPath.with_suffix('.mkv').name
+
     EncodePipeline(
         inFile=workingPath,
-        ptsMap=ptsMap,
-        markerMap=markerMap,
-        outFile=destination / workingPath.with_suffix('.mkv').name,
+        ptsmap_path=ptsmap_path,
+        markermap_path=markermap_path,
+        outFile=outFile,
         outSubtitles=outSubtitles,
         byGroup=byGroup,
         splitNum=splitNum,
@@ -191,6 +221,7 @@ def Encode(item, encoder: str, presets: dict, quiet: bool):
         fixAudio=fixAudio,
         noStrip=noStrip,
         quiet=quiet)
+
     srtPath = destination / 'Subtitles' / workingPath.with_suffix('.srt').name
     if srtPath.exists():
         newSrtPath = srtPath.with_suffix('.ssrrtt')
@@ -203,10 +234,10 @@ def Encode(item, encoder: str, presets: dict, quiet: bool):
             pass
     return outFile
 
-def Cleanup(item):
+
+def Cleanup(item: dict[str, Any]):
     logger.info('Cleaning up ...')
-    files = list(Path(item['cache']).glob('*')) if item['cache'] is not None else []
-    files += list((Path(item['path']).parent / '_tstriage').glob('*'))
+    files = list((Path(item['path']).parent / '_tstriage').glob('*'))
     originalPath = Path(item['path'])
     for path in files:
         if path.stem in originalPath.stem or originalPath.stem in path.stem:

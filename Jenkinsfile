@@ -12,7 +12,7 @@ pipeline {
             agent {
                 docker {
                     label 'linux'
-                    image 'ghcr.io/astral-sh/uv:python3.9-bookworm'
+                    image 'ghcr.io/astral-sh/uv:python3.13-bookworm'
                 }
             }
             steps {
@@ -32,7 +32,7 @@ pipeline {
             agent {
                 docker {
                     label 'linux'
-                    image 'ghcr.io/astral-sh/uv:python3.9-bookworm'
+                    image 'ghcr.io/astral-sh/uv:python3.13-bookworm'
                     args '-e HOME=/var/jenkins_home_tmp --tmpfs /var/jenkins_home_tmp:exec'
                 }
             }
@@ -54,7 +54,7 @@ pipeline {
             agent {
                 docker {
                     label 'linux'
-                    image 'ghcr.io/astral-sh/uv:python3.9-bookworm'
+                    image 'ghcr.io/astral-sh/uv:python3.13-bookworm'
                     args '-e HOME=/var/jenkins_home_tmp --tmpfs /var/jenkins_home_tmp:exec'
                 }
             }

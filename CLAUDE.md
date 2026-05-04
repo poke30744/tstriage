@@ -11,77 +11,58 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - Publish to Test PyPI: `uv publish --publish-url https://test.pypi.org/legacy/ dist/*` (requires credentials)
 
 ### Testing
-- Run all tests: `pytest tests/`
-- Run a specific test: `pytest tests/test_triage.py::test_GetKeywords`
+- Run all tests: `uv run pytest tests/`
+- Run a specific test: `uv run pytest tests/test_input_file.py::test_get_info`
 - Tests are configured for pytest in `.vscode/settings.json`
-
-### Linting and Formatting
-- No lint/format configuration is present; follow PEP 8.
-- Consider using `ruff check` or `black` if added later.
 
 ### Running the Application
 - The entry point is `tstriage.runner:main`, installed as console script `tstriage`.
-- **For local development**: Use `uv run python -m tstriage.runner` to run directly from source. The `tstriage` CLI command runs a compiled `.exe` wrapper — source changes are invisible to it until `uv pip install -e .` is re-run to rebuild the wrapper. If in doubt, always prefer `uv run`.
+- **For local development**: Use `uv run python -m tstriage.runner` to run directly from source.
 - Run with configuration: `uv run python -m tstriage.runner --config tstriage.config.yml --task categorize list analyze mark cut encode confirm cleanup`
 - Individual tasks can be run separately: `--task categorize`, `--task list`, etc.
 
 ## High-Level Architecture
 
 ### Overview
-tstriage is a batch processing pipeline for MPEG2-TS files recorded from TV broadcasts. It categorizes, cuts, encodes, and moves files from a network storage location to a categorized destination, integrating with EPGStation for metadata.
+tstriage is a batch processing pipeline for MPEG2-TS files recorded from TV broadcasts. It orchestrates tscutter and tsmarker via subprocess CLI calls — there are **zero Python import dependencies** on either package.
 
 ### Core Modules
-1. **runner** (`tstriage/runner.py`): Main entry point. Parses CLI arguments, loads configuration, and executes tasks via the `Runner` class.
-2. **tasks** (`tstriage/tasks.py`): Implements the individual processing steps: `Analyze`, `Mark`, `Cut`, `Encode`, `Confirm`, `Cleanup`. Each function operates on an action item JSON file.
-3. **nas** (`tstriage/nas.py`): Manages file discovery on network storage. Searches for unprocessed TS files and handles action item files (`.categorized`, `.toanalyze`, etc.) in a `_tstriage` folder.
-4. **epgstation** (`tstriage/epgstation.py`): Client for EPGStation API to fetch channel list, EPG metadata, and recording keywords.
-5. **epg** (`tstriage/epg.py`): Extracts and parses EPG data from TS files using `mirakurun-epgdump`.
-6. **pipeline** (`tstriage/pipeline.py`): Contains `EncodePipeline` and `MarkerMap` extension for encoding and merging clips.
-7. **common** (`tstriage/common.py`): Utilities like `CopyWithProgress` and `WindowsInhibitor`.
+1. **runner** (`tstriage/runner.py`): Main entry point. Parses CLI arguments, loads YAML configuration, injects environment variables, and executes tasks via the `Runner` class.
+2. **tasks** (`tstriage/tasks.py`): Individual processing steps: `Analyze`, `Mark`, `Cut`, `Encode`, `Confirm`, `Cleanup`. Each function calls tscutter/tsmarker via subprocess.
+3. **pipeline** (`tstriage/pipeline.py`): `EncodePipeline` — ffmpeg encoding orchestration with subtitle extraction and TS stripping.
+4. **input_file** (`tstriage/input_file.py`): Local `InputFile` class with ffmpeg/ffprobe discovery, `GetInfo()`, `StripTsCmd()`, `EncodeTsCmd()`.
+5. **video_info** (`tstriage/video_info.py`): `VideoInfo` dataclass for probe results.
+6. **cli_config** (`tstriage/cli_config.py`): Configurable tscutter/tsmarker command paths, read from config `Cli` section.
+7. **subprocess_utils** (`tstriage/subprocess_utils.py`): `run()`, `run_json()` helpers with error handling.
+8. **nas** (`tstriage/nas.py`): File discovery and action item management in `_tstriage` folder.
+9. **epgstation** (`tstriage/epgstation.py`): EPGStation API client.
+10. **epg** (`tstriage/epg.py`): EPG data extraction via `mirakurun-epgdump` subprocess.
+11. **common** (`tstriage/common.py`): `CopyWithProgress`, `CopyWithProgress2`.
 
 ### Processing Pipeline
-The pipeline consists of sequential tasks, each producing action items with specific suffixes:
-1. **categorize**: Match unprocessed TS files against EPGStation keywords; create `.categorized` items.
-2. **list**: Convert `.categorized` items to `.toanalyze` using settings from `tstriage.json` in destination folders.
-3. **analyze**: Analyze video silence, extract EPG, subtitles, and logo; create `.tomark`.
-4. **mark**: Use subtitles, clip info, logo, speech, and ensemble models to mark program vs. commercial segments; create `.tocut`.
-5. **cut**: Cut TS file based on marking results; create `.toencode`.
-6. **encode**: Encode cut segments to MKV using presets; create `.toconfirm`.
-7. **confirm**: Manually verify cuts; create `.tocleanup` or `.toencode` if re‑encoding needed.
-8. **cleanup**: Remove temporary cache files.
+1. **categorize**: Match unprocessed TS files against EPGStation keywords; create `.categorized`
+2. **list**: Convert `.categorized` to `.toanalyze` using `tstriage.json` settings
+3. **analyze**: `tscutter analyze` → `tsmarker prepare-subtitles` → `tsmarker extract-logo` → audio check; create `.tomark`
+4. **mark**: `tsmarker mark` (subtitles/clipinfo/logo/speech) → `tsmarker ensemble-*`; create `.tocut`
+5. **cut**: `tsmarker cut --by auto`; create `.toencode`
+6. **encode**: `tsmarker get-program-clips` → `tsmarker extract-clips` → ffmpeg encode; create `.toconfirm`
+7. **confirm**: `tsmarker groundtruth`; create `.tocleanup` or `.toencode`
+8. **cleanup**: Remove temporary cache files
 
-### Configuration and Data Files
-- **`tstriage.config.yml`**: Required runtime configuration (paths, encoder, presets, EPGStation URL, etc.). 
-  - Environment variables are supported using `$VAR_NAME` or `${VAR_NAME}` syntax (e.g., `$HOME/recorded`, `${USERPROFILE}/cache`).
-  - An `Environment` (or `Env`, `environment`, `env`) section can be used to inject environment variables into the process. Values in this section will be set as environment variables (converted to strings). Set a value to `null` to remove an existing environment variable.
-- **`event.yml`**: Genre and sub‑genre descriptions for EPG metadata.
-- **`tstriage.json`**: Per‑folder settings (optional; defaults provided by `nas.FindTsTriageSettings`).
-- **Audio metadata YAML files**: Created by tstriage from audio metadata extracted from EPG files generated by `mirakurun-epgdump` during the analyze phase. Located in the same directory as the output MP4 files, named `<ts-filename>.yaml`. Contains `audios` array with audio track information:
-  - `componentType`: Audio format type (2 = dual mono, 3 = normal stereo)
-  - `samplingRate`: Audio sampling rate in Hz
-  - `langs`: Language codes for each channel
-  - Used by `EncodePipeline` to determine audio processing strategy.
-  - See [AUDIO_PROCESSING.md](AUDIO_PROCESSING.md) for detailed documentation.
+### Configuration
+- **`tstriage.config.yml`**: Required runtime config. Supports `$VAR` env var expansion in values.
+  - `Cli`: Optional tscutter/tsmarker command paths (defaults to `tscutter`/`tsmarker` on PATH)
+  - `Environment`: Key-value pairs injected as env vars before task execution
 
 ### External Dependencies
-- **tscutter**: For TS file analysis and cutting. Uses platform‑specific dependencies (`pywin32` on Windows only).
-- **tsmarker**: For marking program/commercial segments.
-- **PyYAML**: Configuration parsing.
-- **psutil**: Process management for single‑instance locking.
-- **mirakurun-epgdump**: External command to extract EPG from TS. The EPG files contain audio metadata which tstriage extracts to create YAML configuration files.
-- **Caption2Ass**: External command for subtitle conversion (Windows‑only path in pipeline).
-- **ffmpeg**: For audio/video encoding. Handles dual mono audio processing using `channelsplit` filter when `componentType=2`.
-
-### Build and Deployment
-- Package uses `setuptools` with dynamic version from `tstriage.__version__`.
-- CI/CD via Jenkins: builds with `uv`, runs limited tests, publishes to Test PyPI.
-- Version format: `0.1.{BUILD_NUMBER}` from environment variable.
+- **tscutter CLI**: analyze, probe, list-clips, select-clips (subprocess only, no Python import)
+- **tsmarker CLI**: mark, cut, groundtruth, extract-clips, extract-logo, crop-detect, prepare-subtitles, get-program-clips, ensemble-* (subprocess only)
+- **ffmpeg / ffprobe**: Via `shutil.which()` in `input_file.py`, with clear error if not found
+- **Caption2AssC.cmd**: Called directly in `EncodePipeline` for subtitle extraction
+- **mirakurun-epgdump**: Called in `epg.py` for EPG data
 
 ### Notes for Development
-- The code assumes Windows‑style paths but includes cross‑platform adjustments.
-- Cache directory (`Cache` in config) is used for temporary TS copies.
-- The pipeline expects network paths (`\\acepc-gk3\...`) but works with local paths.
-- EPGStation integration requires a running EPGStation instance.
-- Test files reference hard‑coded sample paths; adjust accordingly when running tests.
-- **Audio processing**: The `EncodePipeline` in `pipeline.py` supports dual mono audio (`componentType=2`). When detected, stereo audio is split into two mono channels using ffmpeg's `channelsplit` filter, each encoded as independent AAC mono tracks.
-- **Dependency management**: `tscutter` has platform‑specific dependencies declared with `pywin32; platform_system == 'Windows'` syntax. UV handles these correctly when installing from PyPI indices.
+- Python ≥3.13 required
+- All tscutter/tsmarker interaction is via subprocess CLI — zero import dependency
+- For local dev, set `Cli` in config to `uv run --directory <repo> <cmd>` to use uncommitted source
+- Tests are pure unit tests (no sample files needed); use `uv run pytest tests/`

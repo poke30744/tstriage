@@ -7,6 +7,7 @@ import logging
 import unicodedata
 import psutil
 import yaml
+from . import cli_config
 from .epgstation import EPGStation
 from .tasks import Analyze, Mark, Cut, Encode, Confirm, Cleanup
 from .nas import NAS
@@ -17,15 +18,11 @@ class Runner:
     def __init__(self, configuration, quiet: bool):
         self.configuration = configuration
         self.quiet = quiet
-        if 'Cache' in configuration:
-            self.cache = Path(configuration['Cache']).expanduser()
-            self.cache.mkdir(parents=True, exist_ok=True)
-        else:
-            self.cache = None
-        if 'Path' in configuration:
-            for key in configuration['Path']:
-                pathToAdd = configuration["Path"][key]
-                os.environ['PATH'] = f'{os.environ["PATH"]};{pathToAdd}'
+        cli = configuration.get('Cli', {})
+        cli_config.configure(
+            tscutter=cli.get('tscutter', ''),
+            tsmarker=cli.get('tsmarker', ''),
+        )
         self.encoder = configuration['Encoder']
         self.presets = configuration['Presets']
         self.epgStation = EPGStation(url=configuration['EPGStation'])
@@ -66,7 +63,6 @@ class Runner:
         with path.open() as f:
             item = json.load(f)
         # fix pathes
-        item['cache'] = str(self.cache) if self.cache is not None else None
         item['path'] = str(self.nas.recorded / item['path'])
         item['destination'] = (str(self.nas.destination / item['destination'])) if item['destination'] != 'None' else item['destination']
         if os.name == 'nt':
@@ -80,8 +76,6 @@ class Runner:
     def CreateActionItem(self, item, suffix: str) -> Path:
         self.nas.tstriageFolder.mkdir(parents=True, exist_ok=True)
         actionItemPath = self.nas.tstriageFolder / Path(item['path']).with_suffix(suffix).name
-        if 'cache' in item:
-            del item['cache']
         item['path'] = str(Path(item['path']).relative_to(self.nas.recorded))
         item['destination'] = str(Path(item['destination']).relative_to(self.nas.destination)) if item['destination'] is not None else 'None'
         with actionItemPath.open('w') as f:

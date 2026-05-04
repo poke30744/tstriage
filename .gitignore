@@ -3,6 +3,9 @@ __pycache__/
 *.py[cod]
 *$py.class
 
+# Local configuration (use tstriage.config.example.yml as template)
+tstriage.config.yml
+
 # C extensions
 *.so
 
