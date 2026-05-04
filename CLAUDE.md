@@ -66,3 +66,26 @@ tstriage is a batch processing pipeline for MPEG2-TS files recorded from TV broa
 - All tscutter/tsmarker interaction is via subprocess CLI — zero import dependency
 - For local dev, set `Cli` in config to `uv run --directory <repo> <cmd>` to use uncommitted source
 - Tests are pure unit tests (no sample files needed); use `uv run pytest tests/`
+
+### Lessons Learned (2026-05-04 CLI Refactor)
+
+1. **Subprocess exit codes must be checked — never ignore them.**
+   `subprocess_utils.run()` must raise on non-zero exit. Silent failures waste hours.
+
+2. **Don't add defensive `.get()` or try/except to mask symptoms.**
+   If a dict key is missing or an operation fails, find the root cause. Protective defaults hide real bugs.
+
+3. **When migrating to CLI, replicate ALL parameters from the old Python API.**
+   The old `logo.MarkerMap.MarkAll(videoPath, logoPath=logoPath)` passed a cached logo file. The new CLI didn't pass `--logo`, forcing re-extraction which triggered a race condition on slow filesystems.
+
+4. **Never commit or push without explicit permission.**
+   Wait for the user to say "commit" or "push". Use `git stash` for temporary work.
+
+5. **Test locally before claiming something works.**
+   Run the full pipeline on sample data and verify output correctness.
+
+6. **When removing a feature, remove ALL related code.**
+   Deleted `CacheTS` but left `CopyWithProgress2` in common.py — dead code breeds confusion.
+
+7. **`uv run --directory <repo>` creates isolated venvs.**
+   If repo A depends on repo B, repo B must be installed from local source (not Test PyPI) via `[tool.uv.sources]` in repo A's pyproject.toml.
