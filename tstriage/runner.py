@@ -13,7 +13,7 @@ from rich.logging import RichHandler
 from rich.progress import Progress as RichProgress, SpinnerColumn, TextColumn, BarColumn, TimeElapsedColumn, TimeRemainingColumn
 from rich.table import Column
 from . import cli_config
-from ._progress import SubprocessProgress
+from ._progress import SubprocessProgress, _UnitColumn
 
 console = Console(width=None if sys.stderr.isatty() else sys.maxsize)
 from .epgstation import EPGStation
@@ -114,7 +114,7 @@ class Runner:
         paths = list(self.nas.ActionItems('.toanalyze'))
         suffix = '.toanalyze'
         with RichProgress(
-            SpinnerColumn(), TextColumn("{task.description}", table_column=Column(overflow="ellipsis")), BarColumn(), TimeElapsedColumn(), TimeRemainingColumn(),
+            SpinnerColumn(), TextColumn("{task.description}", table_column=Column(overflow="ellipsis")), _UnitColumn(), BarColumn(), TimeElapsedColumn(), TimeRemainingColumn(),
             console=console, transient=False, refresh_per_second=10
         ) as rich:
             file_task = rich.add_task("Analyze", total=len(paths))
@@ -142,7 +142,7 @@ class Runner:
         paths = list(self.nas.ActionItems('.tomark'))
         suffix = '.tomark'
         with RichProgress(
-            SpinnerColumn(), TextColumn("{task.description}", table_column=Column(overflow="ellipsis")), BarColumn(), TimeElapsedColumn(), TimeRemainingColumn(),
+            SpinnerColumn(), TextColumn("{task.description}", table_column=Column(overflow="ellipsis")), _UnitColumn(), BarColumn(), TimeElapsedColumn(), TimeRemainingColumn(),
             console=console, transient=False, refresh_per_second=10
         ) as rich:
             file_task = rich.add_task("Mark", total=len(paths))
@@ -170,7 +170,7 @@ class Runner:
         paths = list(self.nas.ActionItems('.tocut'))
         suffix = '.tocut'
         with RichProgress(
-            SpinnerColumn(), TextColumn("{task.description}", table_column=Column(overflow="ellipsis")), BarColumn(), TimeElapsedColumn(), TimeRemainingColumn(),
+            SpinnerColumn(), TextColumn("{task.description}", table_column=Column(overflow="ellipsis")), _UnitColumn(), BarColumn(), TimeElapsedColumn(), TimeRemainingColumn(),
             console=console, transient=False, refresh_per_second=10
         ) as rich:
             file_task = rich.add_task("Cut", total=len(paths))
@@ -199,7 +199,7 @@ class Runner:
         paths = list(self.nas.ActionItems('.toencode'))
         suffix = '.toencode'
         with RichProgress(
-            SpinnerColumn(), TextColumn("{task.description}", table_column=Column(overflow="ellipsis")), BarColumn(), TimeElapsedColumn(), TimeRemainingColumn(),
+            SpinnerColumn(), TextColumn("{task.description}", table_column=Column(overflow="ellipsis")), _UnitColumn(), BarColumn(), TimeElapsedColumn(), TimeRemainingColumn(),
             console=console, transient=False, refresh_per_second=10
         ) as rich:
             file_task = rich.add_task("Encode", total=len(paths))

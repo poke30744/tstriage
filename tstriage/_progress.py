@@ -9,9 +9,29 @@ Child side (tscutter/tsmarker): Progress wrapper auto-detects mode.
 """
 
 import json, sys, time, logging
-from rich.progress import Progress as RichProgress, TaskID
+from rich.progress import Progress as RichProgress, TaskID, ProgressColumn
+from rich.text import Text
+from rich import filesize as _filesize
 
 logger = logging.getLogger('tstriage.progress')
+
+
+class _UnitColumn(ProgressColumn):
+    """Progress column that formats completed/total according to unit."""
+
+    def render(self, task):
+        total = task.total or 0
+        completed = task.completed or 0
+        unit = task.fields.get("unit", "it")
+        if unit == "B":
+            text = f"{_filesize.decimal(completed)}/{_filesize.decimal(total)}"
+        elif total == int(total):
+            text = f"{int(completed)}/{int(total)}"
+        else:
+            text = f"{completed:.1f}/{total:.1f}"
+        if unit not in ("it", "B"):
+            text += f" {unit}"
+        return Text(text, style="progress.percentage")
 
 
 class SubprocessProgress:
