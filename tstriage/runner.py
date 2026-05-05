@@ -310,7 +310,7 @@ def _inject_env_vars(configuration):
                     del os.environ[key]
                     logger.info(f'Removed environment variable: {key}')
 
-@click.group()
+@click.group(context_settings={'help_option_names': ['-h', '--help']})
 @click.option('--config', '-c', default='tstriage.config.yml', show_default=True, help='Configuration file path')
 @click.option('--quiet', '-q', is_flag=True, help='Suppress non-error output')
 @click.option('--verbose', '-v', is_flag=True, help='Enable debug output')
