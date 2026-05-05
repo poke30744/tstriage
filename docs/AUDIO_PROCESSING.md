@@ -89,5 +89,5 @@ Test with TS files containing dual mono audio to verify:
 
 ### Test Command
 ```bash
-tstriage --config tstriage.config.yml --task encode --input <ts-file>
+tstriage --config tstriage.config.yml encode
 ```

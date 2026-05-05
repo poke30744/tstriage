@@ -15,7 +15,7 @@ Batch runner to process MPEG2-TS files
 
 1. Install dependencies: `uv pip install -e .`
 2. Configure `tstriage.config.yml`
-3. Run the pipeline: `tstriage --config tstriage.config.yml --task categorize list analyze mark cut encode confirm cleanup`
+3. Run the pipeline: `tstriage --config tstriage.config.yml run categorize list analyze mark cut encode confirm cleanup`
 
 ## Configuration
 
@@ -96,5 +96,5 @@ Key packages: tscutter, tsmarker, ffmpeg-python, PyYAML, psutil, pysubs2.
 ## Documentation
 
 - [CLAUDE.md](CLAUDE.md) - Development guide and architecture
-- [CLI_DESIGN.md](CLI_DESIGN.md) - CLI decoupling design and progress
-- [AUDIO_PROCESSING.md](AUDIO_PROCESSING.md) - Audio processing details
+- [CLI_DESIGN.md](docs/CLI_DESIGN.md) - CLI decoupling design and progress
+- [AUDIO_PROCESSING.md](docs/AUDIO_PROCESSING.md) - Audio processing details

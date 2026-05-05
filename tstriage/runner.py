@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
-import argparse, json, os, socket, sys
+import json, os, socket, sys
 import shutil
 from itertools import chain
 from pathlib import Path
 import logging
 import unicodedata
 import psutil
+import click
 import yaml
 from rich.console import Console
 from rich.logging import RichHandler
@@ -309,18 +310,26 @@ def _inject_env_vars(configuration):
                     del os.environ[key]
                     logger.info(f'Removed environment variable: {key}')
 
-def main():
-    parser = argparse.ArgumentParser(description='Python script to triage TS files')
-    parser.add_argument('--config', '-c', default='tstriage.config.yml', help='configuration file path')
-    parser.add_argument('--quiet', '-q', action='store_true', default=False, help='suppress non-error output')
-    parser.add_argument('--verbose', '-v', action='store_true', default=False, help='enable debug output')
-    parser.add_argument('--task', '-t', required=True, nargs='+', choices=['categorize', 'list', 'analyze', 'mark', 'cut', 'confirm', 'encode', 'cleanup'], help='tasks to run')
+@click.group()
+@click.option('--config', '-c', default='tstriage.config.yml', show_default=True, help='Configuration file path')
+@click.option('--quiet', '-q', is_flag=True, help='Suppress non-error output')
+@click.option('--verbose', '-v', is_flag=True, help='Enable debug output')
+@click.pass_context
+def cli(ctx, config, quiet, verbose):
+    """MPEG TS Triage Runner — batch processing pipeline for TV broadcast TS files.
 
-    args = parser.parse_args()
+    Processes recorded TS files through the pipeline:
 
-    if args.verbose:
+    categorize -> list -> analyze -> mark -> cut -> encode -> confirm -> cleanup
+
+    \b
+    Examples:
+      tstriage run categorize list analyze mark cut encode confirm cleanup
+      tstriage categorize                             # single task
+    """
+    if verbose:
         log_level = logging.DEBUG
-    elif args.quiet:
+    elif quiet:
         log_level = logging.WARNING
     else:
         log_level = logging.INFO
@@ -328,18 +337,100 @@ def main():
         level=log_level, format='%(message)s', datefmt='[%X]',
         handlers=[RichHandler(console=console, rich_tracebacks=True)])
 
-    configurationPath = Path(args.config)
-    with configurationPath.open(encoding='utf-8') as f:
+    ctx.ensure_object(dict)
+    ctx.obj['config'] = config
+    ctx.obj['quiet'] = quiet
+
+
+def _load_config(ctx):
+    """Load and prepare configuration from YAML file."""
+    config_path = Path(ctx.obj['config'])
+    with config_path.open(encoding='utf-8') as f:
         configuration = yaml.safe_load(f)
-
-    # Expand environment variables in configuration
     configuration = _expand_env_vars(configuration)
-
-    # Inject environment variables from configuration
     _inject_env_vars(configuration)
+    return configuration
 
-    runner = Runner(configuration, quiet=args.quiet)
-    runner.Run(args.task)
+
+def _run_tasks(ctx, tasks):
+    """Create Runner and execute the given tasks."""
+    configuration = _load_config(ctx)
+    Runner(configuration, quiet=ctx.obj['quiet']).Run(tasks)
+
+
+@cli.command()
+@click.pass_context
+def categorize(ctx):
+    """Match unprocessed TS files against EPGStation keywords, create .categorized items."""
+    _run_tasks(ctx, ['categorize'])
+
+
+@cli.command(name='list')
+@click.pass_context
+def list_cmd(ctx):
+    """Convert .categorized items to .toanalyze using tstriage.json settings."""
+    _run_tasks(ctx, ['list'])
+
+
+@cli.command()
+@click.pass_context
+def analyze(ctx):
+    """Run tscutter analyze and tsmarker prepare-subtitles/extract-logo, create .tomark items."""
+    _run_tasks(ctx, ['analyze'])
+
+
+@cli.command()
+@click.pass_context
+def mark(ctx):
+    """Run tsmarker mark (subtitles/logo/clipinfo/speech), create .tocut items."""
+    _run_tasks(ctx, ['mark'])
+
+
+@cli.command()
+@click.pass_context
+def cut(ctx):
+    """Cut CM segments via tsmarker cut, create .toencode items."""
+    _run_tasks(ctx, ['cut'])
+
+
+@cli.command()
+@click.pass_context
+def encode(ctx):
+    """Encode program clips to MKV via ffmpeg, create .toconfirm items."""
+    _run_tasks(ctx, ['encode'])
+
+
+@cli.command()
+@click.pass_context
+def confirm(ctx):
+    """Review encoded output with tsmarker groundtruth, decide re-encode or cleanup."""
+    _run_tasks(ctx, ['confirm'])
+
+
+@cli.command()
+@click.pass_context
+def cleanup(ctx):
+    """Remove temporary cache files for completed items."""
+    _run_tasks(ctx, ['cleanup'])
+
+
+@cli.command()
+@click.argument('tasks', nargs=-1, required=True, type=click.Choice([
+    'categorize', 'list', 'analyze', 'mark', 'cut', 'encode', 'confirm', 'cleanup'
+]))
+@click.pass_context
+def run(ctx, tasks):
+    """Run multiple pipeline tasks in sequence.
+
+    TASKS: one or more task names to execute in order.
+    Example: tstriage run categorize list analyze mark cut encode confirm cleanup
+    """
+    _run_tasks(ctx, list(tasks))
+
+
+def main():
+    cli()
+
 
 if __name__ == "__main__":
     main()

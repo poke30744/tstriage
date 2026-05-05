@@ -121,7 +121,7 @@ def Mark(item: dict[str, Any], epgStation: EPGStation, quiet: bool, progress: Su
 
     run_pipe(cli_config.tsmarker(
         *_pq(quiet), 'mark',
-        '--method', 'subtitles', 'clipinfo', 'logo', 'speech',
+        '--method', 'subtitles', '--method', 'clipinfo', '--method', 'logo', '--method', 'speech',
         '--input', str(workingPath),
         '--index', str(indexPath),
         '--marker', str(markerPath),

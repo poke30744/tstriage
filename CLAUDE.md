@@ -18,8 +18,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ### Running the Application
 - The entry point is `tstriage.runner:main`, installed as console script `tstriage`.
 - **For local development**: Use `uv run python -m tstriage.runner` to run directly from source.
-- Run with configuration: `uv run python -m tstriage.runner --config tstriage.config.yml --task categorize list analyze mark cut encode confirm cleanup`
-- Individual tasks can be run separately: `--task categorize`, `--task list`, etc.
+- Run with configuration: `uv run python -m tstriage.runner --config tstriage.config.yml run categorize list analyze mark cut encode confirm cleanup`
+- Individual tasks can be run as subcommands: `tstriage categorize`, `tstriage list`, etc.
 
 ## High-Level Architecture
 
