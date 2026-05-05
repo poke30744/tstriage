@@ -21,7 +21,7 @@ dependencies = [
     "psutil",
     "ffmpeg-python",
     "pysubs2",
-    "tqdm",
+    "rich",
 ]
 
 [project.scripts]

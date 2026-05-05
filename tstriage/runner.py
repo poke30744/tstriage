@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-import argparse, json, os, socket
+import argparse, json, os, socket, sys
 import shutil
 from itertools import chain
 from pathlib import Path
@@ -7,7 +7,14 @@ import logging
 import unicodedata
 import psutil
 import yaml
+from rich.console import Console
+from rich.logging import RichHandler
+from rich.progress import Progress as RichProgress, SpinnerColumn, TextColumn, BarColumn, TimeElapsedColumn, TimeRemainingColumn
+from rich.table import Column
 from . import cli_config
+from ._progress import SubprocessProgress
+
+console = Console(width=None if sys.stderr.isatty() else sys.maxsize)
 from .epgstation import EPGStation
 from .tasks import Analyze, Mark, Cut, Encode, Confirm, Cleanup
 from .nas import NAS
@@ -100,70 +107,122 @@ class Runner:
                 self.CreateActionItem(newItem, '.toanalyze')
                 logger.info(f'Will process: {item["path"]}')
             else:
-                logger.warn(f'More information is needed: {item["path"]}')
+                logger.warning(f'More information is needed: {item["path"]}')
 
     def Analyze(self):
-        for path in self.nas.ActionItems('.toanalyze'):
-            item = self.LoadActionItem(path)
-            path = path.rename(path.with_suffix(f'.toanalyze.{socket.gethostname()}'))
-            try:
-                Analyze(item=item, epgStation=self.epgStation, quiet=self.quiet)
-                path.unlink()
-                self.CreateActionItem(item, '.tomark')
-            except KeyboardInterrupt:
-                raise
-            except:
-                logger.exception(f'in analyzing "{path}":')
-                path.rename(path.with_suffix('.error'))
-                raise
+        paths = list(self.nas.ActionItems('.toanalyze'))
+        suffix = '.toanalyze'
+        with RichProgress(
+            SpinnerColumn(), TextColumn("{task.description}", table_column=Column(overflow="ellipsis")), BarColumn(), TimeElapsedColumn(), TimeRemainingColumn(),
+            console=console, transient=False, refresh_per_second=10
+        ) as rich:
+            file_task = rich.add_task("Analyze", total=len(paths))
+            for path in paths:
+                item = self.LoadActionItem(path)
+                name = Path(item['path']).stem
+                rich.update(file_task, description=f"Analyze: {name}")
+                original = path
+                path = path.rename(path.with_suffix(f'{suffix}.{socket.gethostname()}'))
+                try:
+                    progress = SubprocessProgress(rich, ctx=name)
+                    Analyze(item=item, epgStation=self.epgStation, quiet=self.quiet, progress=progress)
+                    path.unlink()
+                    self.CreateActionItem(item, '.tomark')
+                except KeyboardInterrupt:
+                    path.rename(original)
+                    raise
+                except:
+                    logger.exception(f'in analyzing "{path}":')
+                    path.rename(path.with_suffix('.error'))
+                    raise
+                rich.advance(file_task)
 
     def Mark(self):
-        for path in self.nas.ActionItems('.tomark'):
-            item = self.LoadActionItem(path)
-            path = path.rename(path.with_suffix(f'.tomark.{socket.gethostname()}'))
-            try:
-                Mark(item=item, epgStation=self.epgStation, quiet=self.quiet)
-                path.unlink()
-                self.CreateActionItem(item, '.tocut')
-            except KeyboardInterrupt:
-                raise
-            except:
-                logger.exception(f'in marking "{path}":')
-                path.rename(path.with_suffix('.error'))
-                raise
+        paths = list(self.nas.ActionItems('.tomark'))
+        suffix = '.tomark'
+        with RichProgress(
+            SpinnerColumn(), TextColumn("{task.description}", table_column=Column(overflow="ellipsis")), BarColumn(), TimeElapsedColumn(), TimeRemainingColumn(),
+            console=console, transient=False, refresh_per_second=10
+        ) as rich:
+            file_task = rich.add_task("Mark", total=len(paths))
+            for path in paths:
+                item = self.LoadActionItem(path)
+                name = Path(item['path']).stem
+                rich.update(file_task, description=f"Mark: {name}")
+                original = path
+                path = path.rename(path.with_suffix(f'{suffix}.{socket.gethostname()}'))
+                try:
+                    progress = SubprocessProgress(rich, ctx=name)
+                    Mark(item=item, epgStation=self.epgStation, quiet=self.quiet, progress=progress)
+                    path.unlink()
+                    self.CreateActionItem(item, '.tocut')
+                except KeyboardInterrupt:
+                    path.rename(original)
+                    raise
+                except:
+                    logger.exception(f'in marking "{path}":')
+                    path.rename(path.with_suffix('.error'))
+                    raise
+                rich.advance(file_task)
 
     def Cut(self):
-        for path in self.nas.ActionItems('.tocut'):
-            item = self.LoadActionItem(path)
-            outputFolder = path.with_suffix("")
-            path = path.rename(path.with_suffix(f'.tocut.{socket.gethostname()}'))
-            try:
-                Cut(item=item, outputFolder=outputFolder, quiet=self.quiet)
-                path.unlink()
-                self.CreateActionItem(item, '.toencode')
-            except KeyboardInterrupt:
-                raise
-            except:
-                logger.exception(f'in cutting "{path}":')
-                path.rename(path.with_suffix('.error'))
-                raise
+        paths = list(self.nas.ActionItems('.tocut'))
+        suffix = '.tocut'
+        with RichProgress(
+            SpinnerColumn(), TextColumn("{task.description}", table_column=Column(overflow="ellipsis")), BarColumn(), TimeElapsedColumn(), TimeRemainingColumn(),
+            console=console, transient=False, refresh_per_second=10
+        ) as rich:
+            file_task = rich.add_task("Cut", total=len(paths))
+            for path in paths:
+                item = self.LoadActionItem(path)
+                name = Path(item['path']).stem
+                rich.update(file_task, description=f"Cut: {name}")
+                outputFolder = path.with_suffix("")
+                original = path
+                path = path.rename(path.with_suffix(f'{suffix}.{socket.gethostname()}'))
+                try:
+                    progress = SubprocessProgress(rich, ctx=name)
+                    Cut(item=item, outputFolder=outputFolder, quiet=self.quiet, progress=progress)
+                    path.unlink()
+                    self.CreateActionItem(item, '.toencode')
+                except KeyboardInterrupt:
+                    path.rename(original)
+                    raise
+                except:
+                    logger.exception(f'in cutting "{path}":')
+                    path.rename(path.with_suffix('.error'))
+                    raise
+                rich.advance(file_task)
 
     def Encode(self):
-        for path in self.nas.ActionItems('.toencode'):
-            item = self.LoadActionItem(path)
-            path = path.rename(path.with_suffix(f'.toencode.{socket.gethostname()}'))
-            try:
-                Encode(item=item, encoder=self.encoder, presets=self.presets, quiet=self.quiet)
-                path.unlink()
-                metadataFolder = Path(item['destination']) / '_metadata'
-                newTriagePath = self.CreateActionItem(item, '.toconfirm')
-                shutil.copy(newTriagePath, metadataFolder / newTriagePath.with_suffix('.toencode').name)
-            except KeyboardInterrupt:
-                raise
-            except:
-                logger.exception(f'in encoding "{path}":')
-                path.rename(path.with_suffix('.error'))
-                raise
+        paths = list(self.nas.ActionItems('.toencode'))
+        suffix = '.toencode'
+        with RichProgress(
+            SpinnerColumn(), TextColumn("{task.description}", table_column=Column(overflow="ellipsis")), BarColumn(), TimeElapsedColumn(), TimeRemainingColumn(),
+            console=console, transient=False, refresh_per_second=10
+        ) as rich:
+            file_task = rich.add_task("Encode", total=len(paths))
+            for path in paths:
+                item = self.LoadActionItem(path)
+                name = Path(item['path']).stem
+                rich.update(file_task, description=f"Encode: {name}")
+                original = path
+                path = path.rename(path.with_suffix(f'{suffix}.{socket.gethostname()}'))
+                try:
+                    progress = SubprocessProgress(rich, ctx=name)
+                    Encode(item=item, encoder=self.encoder, presets=self.presets, quiet=self.quiet, progress=progress)
+                    path.unlink()
+                    metadataFolder = Path(item['destination']) / '_metadata'
+                    newTriagePath = self.CreateActionItem(item, '.toconfirm')
+                    shutil.copy(newTriagePath, metadataFolder / newTriagePath.with_suffix('.toencode').name)
+                except KeyboardInterrupt:
+                    path.rename(original)
+                    raise
+                except:
+                    logger.exception(f'in encoding "{path}":')
+                    path.rename(path.with_suffix('.error'))
+                    raise
+                rich.advance(file_task)
 
     def Confirm(self):
         for path in chain(self.nas.ActionItems('.toencode'), self.nas.ActionItems('.toconfirm'), self.nas.ActionItems('.tocleanup')):
@@ -253,13 +312,21 @@ def _inject_env_vars(configuration):
 def main():
     parser = argparse.ArgumentParser(description='Python script to triage TS files')
     parser.add_argument('--config', '-c', default='tstriage.config.yml', help='configuration file path')
-    parser.add_argument('--quiet', '-q', action='store_true', default=False, help='disable progress bar')
+    parser.add_argument('--quiet', '-q', action='store_true', default=False, help='suppress non-error output')
+    parser.add_argument('--verbose', '-v', action='store_true', default=False, help='enable debug output')
     parser.add_argument('--task', '-t', required=True, nargs='+', choices=['categorize', 'list', 'analyze', 'mark', 'cut', 'confirm', 'encode', 'cleanup'], help='tasks to run')
 
     args = parser.parse_args()
 
-    log_level = logging.WARNING if args.quiet else logging.INFO
-    logging.basicConfig(level=log_level, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+    if args.verbose:
+        log_level = logging.DEBUG
+    elif args.quiet:
+        log_level = logging.WARNING
+    else:
+        log_level = logging.INFO
+    logging.basicConfig(
+        level=log_level, format='%(message)s', datefmt='[%X]',
+        handlers=[RichHandler(console=console, rich_tracebacks=True)])
 
     configurationPath = Path(args.config)
     with configurationPath.open(encoding='utf-8') as f:

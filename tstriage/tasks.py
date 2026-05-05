@@ -1,72 +1,79 @@
-import json, logging, shutil, subprocess
+import contextlib, json, logging, shutil, subprocess
 from pathlib import Path
 from typing import Any
 
 from . import cli_config
+from ._progress import SubprocessProgress
 from .epg import EPG
 from .epgstation import EPGStation
 from .pipeline import EncodePipeline
-from .subprocess_utils import run, run_json
+from .subprocess_utils import run, run_json, run_pipe
 
 logger = logging.getLogger('tstriage.tasks')
 
 
 def _q(quiet: bool) -> list[str]:
+    """Build optional --quiet flag for non-progress subprocess calls."""
     return ['--quiet'] if quiet else []
 
 
-def Analyze(item: dict[str, Any], epgStation: EPGStation, quiet: bool):
+def _pq(quiet: bool) -> list[str]:
+    """Build --progress + optional --quiet flags for progress-enabled subprocess calls."""
+    flags = ['--progress']
+    if quiet:
+        flags.append('--quiet')
+    return flags
+
+
+def Analyze(item: dict[str, Any], epgStation: EPGStation, quiet: bool, progress: SubprocessProgress | None = None):
     path = Path(item['path'])
     destination = Path(item['destination'])
     workingPath = Path(item['path'])
 
-    logger.info('Analyzing to split ...')
     indexPath = destination / '_metadata' / workingPath.with_suffix('.ptsmap').name
 
     minSilenceLen = item.get('cutter', {}).get('minSilenceLen', 800)
     silenceThresh = item.get('cutter', {}).get('silenceThresh', -80)
     splitPosShift = item.get('cutter', {}).get('splitPosShift', 1)
 
-    result = run(cli_config.tscutter(
-        *_q(quiet), 'analyze',
+    run_pipe(cli_config.tscutter(
+        *_pq(quiet), 'analyze',
         '--input', str(workingPath),
         '--output', str(indexPath),
         '--length', str(minSilenceLen),
         '--threshold', str(silenceThresh),
         '--shift', str(splitPosShift),
-    ))
-    if result.returncode != 0:
-        raise RuntimeError(f'tscutter analyze failed: {result.stderr}')
+    ), progress=progress)
 
-    logger.info('Extracting EPG ...')
     epgPath = destination / '_metadata' / workingPath.with_suffix('.epg').name
-    EPG.Dump(workingPath, epgPath, quiet=quiet)
+    with (progress.status("Extracting EPG") if progress else contextlib.nullcontext()):
+        EPG.Dump(workingPath, epgPath, quiet=quiet)
 
-    probe_data = run_json(cli_config.tscutter(*_q(quiet), 'probe', '--input', str(workingPath)))
+    probe_data = run_json(cli_config.tscutter('probe', '--input', str(workingPath)))
     if probe_data is None:
         raise RuntimeError('tscutter probe failed')
 
     epg = EPG(epgPath, probe_data['serviceId'], epgStation.GetChannels())
     epg.OutputDesc(destination / workingPath.with_suffix('.yaml').name)
 
-    logger.info('Extracting subtitles ...')
-    run(cli_config.tsmarker(
-        *_q(quiet), 'prepare-subtitles',
+    if progress:
+        progress.clear_parent_desc()
+    run_pipe(cli_config.tsmarker(
+        *_pq(quiet), 'prepare-subtitles',
         '--input', str(workingPath),
         '--index', str(indexPath),
-    ))
+    ), progress=progress)
 
     logoPath = (path.parent / '_tstriage' / f'{epg.Channel()}_{probe_data["width"]}x{probe_data["height"]}').with_suffix('.png')
     if not logoPath.exists():
-        run(cli_config.tsmarker(
-            *_q(quiet), 'extract-logo',
+        run_pipe(cli_config.tsmarker(
+            *_pq(quiet), 'extract-logo',
             '--input', str(workingPath),
             '--index', str(indexPath),
             '--output', str(logoPath),
             '--max-time', '999999',
-        ))
+        ), progress=progress)
 
-    logger.info('Checking audio streams for decode errors...')
     ffmpeg_path = 'ffmpeg'
     ffprobe_path = 'ffprobe'
 
@@ -76,28 +83,28 @@ def Analyze(item: dict[str, Any], epgStation: EPGStation, quiet: bool):
         capture_output=True, text=True, check=True)
     audio_global_indices = list(dict.fromkeys([line.strip() for line in result.stdout.strip().split('\n') if line.strip()]))
 
-    for audio_pos, global_idx in enumerate(audio_global_indices):
-        decode_result = subprocess.run(
-            [ffmpeg_path, '-v', 'error', '-err_detect', 'aggressive',
-             '-i', str(workingPath), '-map', f'0:a:{audio_pos}',
-             '-t', '2', '-f', 'null', '-'],
-            capture_output=True, text=True)
+    with (progress.status("Checking audio") if progress else contextlib.nullcontext()):
+        for audio_pos, global_idx in enumerate(audio_global_indices):
+            decode_result = subprocess.run(
+                [ffmpeg_path, '-v', 'error', '-err_detect', 'aggressive',
+                 '-i', str(workingPath), '-map', f'0:a:{audio_pos}',
+                 '-t', '2', '-f', 'null', '-'],
+                capture_output=True, text=True)
 
-        error_lines = [line for line in decode_result.stderr.strip().split('\n')
-                       if 'channel element' in line and 'is not allocated' in line]
-        if error_lines:
-            logger.warning(f'Audio stream {global_idx} (position {audio_pos}) has decode errors:')
-            for line in error_lines:
-                logger.warning(f'  {line}')
-            item['encoder']['fixaudio'] = True
+            error_lines = [line for line in decode_result.stderr.strip().split('\n')
+                           if 'channel element' in line and 'is not allocated' in line]
+            if error_lines:
+                logger.warning(f'Audio stream #{global_idx} has decode errors:')
+                for line in error_lines:
+                    logger.warning(f'  {line}')
+                item['encoder']['fixaudio'] = True
 
 
-def Mark(item: dict[str, Any], epgStation: EPGStation, quiet: bool):
+def Mark(item: dict[str, Any], epgStation: EPGStation, quiet: bool, progress: SubprocessProgress | None = None):
     path = Path(item['path'])
     destination = Path(item['destination'])
     workingPath = Path(item['path'])
 
-    logger.info('Marking ...')
     indexPath = destination / '_metadata' / workingPath.with_suffix('.ptsmap').name
     markerPath = destination / '_metadata' / workingPath.with_suffix('.markermap').name
 
@@ -112,14 +119,14 @@ def Mark(item: dict[str, Any], epgStation: EPGStation, quiet: bool):
     epg = EPG(epgPath, probe_data['serviceId'], epgStation.GetChannels())
     logoPath = (path.parent / '_tstriage' / f'{epg.Channel()}_{probe_data["width"]}x{probe_data["height"]}').with_suffix('.png')
 
-    run(cli_config.tsmarker(
-        *_q(quiet), 'mark',
+    run_pipe(cli_config.tsmarker(
+        *_pq(quiet), 'mark',
         '--method', 'subtitles', 'clipinfo', 'logo', 'speech',
         '--input', str(workingPath),
         '--index', str(indexPath),
         '--marker', str(markerPath),
         '--logo', str(logoPath),
-    ))
+    ), progress=progress)
 
     noEnsemble = item.get('marker', {}).get('noEnsemble', False)
     outputFolder = Path(item['destination'])
@@ -131,7 +138,7 @@ def Mark(item: dict[str, Any], epgStation: EPGStation, quiet: bool):
             *_q(quiet), 'ensemble-dataset',
             '--input', str(searchFolder),
             '--output', str(datasetCsv),
-        ))
+        ), capture_stderr=True)
 
         if 'No metadata' not in ds_result.stderr and 'warning' not in ds_result.stderr.lower():
             modelPath = datasetCsv.with_suffix('.pkl')
@@ -148,28 +155,26 @@ def Mark(item: dict[str, Any], epgStation: EPGStation, quiet: bool):
             ))
 
 
-def Cut(item: dict[str, str], outputFolder: Path, quiet: bool):
+def Cut(item: dict[str, str], outputFolder: Path, quiet: bool, progress: SubprocessProgress | None = None):
     destination = Path(item['destination'])
     workingPath = Path(item['path'])
 
-    logger.info('Cutting ...')
     indexPath = destination / '_metadata' / workingPath.with_suffix('.ptsmap').name
     markerPath = destination / '_metadata' / workingPath.with_suffix('.markermap').name
 
-    run(cli_config.tsmarker(
-        *_q(quiet), 'cut',
+    run_pipe(cli_config.tsmarker(
+        *_pq(quiet), 'cut',
         '--input', str(workingPath),
         '--index', str(indexPath),
         '--marker', str(markerPath),
         '--output', str(outputFolder),
-    ))
+    ), progress=progress)
 
 
 def Confirm(item: dict[str, str], outputFolder: Path):
     path = Path(item['path'])
     destination = Path(item['destination'])
 
-    logger.info(f'Marking ground truth for {path.name} ...')
     markerPath = destination / '_metadata' / (path.stem + '.markermap')
     indexPath = markerPath.with_suffix('.ptsmap')
 
@@ -187,7 +192,7 @@ def Confirm(item: dict[str, str], outputFolder: Path):
     return isReEncodingNeeded
 
 
-def Encode(item: dict[str, Any], encoder: str, presets: dict, quiet: bool):
+def Encode(item: dict[str, Any], encoder: str, presets: dict, quiet: bool, progress: SubprocessProgress | None = None):
     path = Path(item['path'])
     destination = Path(item['destination'])
     byGroup = item.get('encoder', {}).get('bygroup', False)
@@ -220,7 +225,8 @@ def Encode(item: dict[str, Any], encoder: str, presets: dict, quiet: bool):
         encoder=encoder,
         fixAudio=fixAudio,
         noStrip=noStrip,
-        quiet=quiet)
+        quiet=quiet,
+        progress=progress)
 
     srtPath = destination / 'Subtitles' / workingPath.with_suffix('.srt').name
     if srtPath.exists():

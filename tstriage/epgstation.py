@@ -1,8 +1,6 @@
 from pathlib import Path
 from typing import Optional
-import urllib.request, urllib.parse, json, logging
-
-logger = logging.getLogger('tstriage.epgstation')
+import urllib.request, urllib.parse, json
 
 class EPGStation:
     def __init__(self, url: str):

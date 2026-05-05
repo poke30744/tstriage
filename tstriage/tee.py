@@ -1,8 +1,3 @@
-import logging
-
-logger = logging.getLogger('tstriage.tee')
-
-
 class Tee:
     """Write data from a stream to multiple pipes.
 
@@ -15,9 +10,11 @@ class Tee:
         self.pipes = pipes
         self.broken_ok = set(broken_ok)
 
-    def pump(self, stream, buf_size: int = 1024 * 1024):
+    def pump(self, stream, buf_size: int = 1024 * 1024, on_chunk=None):
         while chunk := stream.read(buf_size):
             self.write(chunk)
+            if on_chunk is not None:
+                on_chunk(len(chunk))
         self.close()
 
     def write(self, data):

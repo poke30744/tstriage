@@ -4,6 +4,7 @@ import pysubs2
 import yaml
 from . import cli_config
 from .input_file import InputFile
+from .subprocess_utils import run_json
 from .tee import Tee
 
 logger = logging.getLogger('tstriage.pipeline')
@@ -46,10 +47,9 @@ def _get_program_clips(ptsmap_path: Path, markermap_path: Path, split_num: int, 
     if quiet:
         cmd += ['--quiet']
 
-    result = subprocess.run(cmd, capture_output=True, text=True)
-    if result.returncode != 0:
-        raise RuntimeError(f'tsmarker get-program-clips failed: {result.stderr}')
-    data = json.loads(result.stdout)
+    data = run_json(cmd)
+    if data is None:
+        raise RuntimeError('tsmarker get-program-clips failed')
     logger.info(f'Using method: {data["by_method"]}')
     return data['groups']
 
@@ -97,27 +97,50 @@ def _start_subtitles_process(out_subtitles: Path, out_file: Path):
 
 def EncodePipeline(inFile: Path, ptsmap_path: Path, markermap_path: Path, outFile: Path, outSubtitles: Path,
                    byGroup: bool, splitNum: int, preset: dict, cropdetect: bool, encoder: str,
-                   fixAudio: bool, noStrip: bool, quiet=False):
+                   fixAudio: bool, noStrip: bool, quiet=False, progress=None):
 
     audio_config = _load_audio(outFile.parent / inFile.with_suffix('.yaml').name)
 
     groups = _get_program_clips(ptsmap_path, markermap_path, splitNum, byGroup, quiet)
     total = sum(clip[1] - clip[0] for group in groups for clip in group)
-    logger.info(f'Extracted Program length: {total}')
-    logger.info(f'Will be encoded into {len(groups)} files')
+    mins = int(total // 60)
+    secs = int(total % 60)
+    logger.info(f'Duration: {total:.1f}s ({mins}m{secs}s)')
+    n = len(groups)
+    logger.info(f'Encoding into {n} file{"s" if n > 1 else ""}')
 
     crop = _detect_crop(inFile, ptsmap_path, quiet) if cropdetect else None
     inputFile = InputFile(inFile)
 
     for i, clips in enumerate(groups):
         currentOut = outFile if len(groups) == 1 else outFile.parent / f'{outFile.stem}_{i}.mkv'
-        logger.info(f'Encoding {currentOut.name} ...')
         currentOut.unlink(missing_ok=True)
         currentOut.touch()
 
+        # Calculate total bytes for progress tracking.
+        # extractP outputs concatenated clip byte ranges from the original TS.
+        # Tee.pump feeds these bytes to ffmpeg, so byte throughput ≈ encode progress.
+        total_bytes = 0
+        with open(ptsmap_path) as f:
+            ptsmap_data = json.load(f)
+        for clip in clips:
+            start_pos = ptsmap_data[str(clip[0])]['next_start_pos']
+            end_pos = ptsmap_data[str(clip[1])]['prev_end_pos']
+            total_bytes += end_pos - start_pos
+
+        encode_tid = "ffmpeg_encode"
+        if progress is not None:
+            progress.add_task(encode_tid, total_bytes, "Encoding", unit="B")
+        bytes_read = 0
+        def _on_chunk(n):
+            nonlocal bytes_read
+            bytes_read += n
+            if progress is not None:
+                progress.update(encode_tid, bytes_read)
+
         encode_cmd = inputFile.EncodeTsCmd('-', str(currentOut), preset, encoder, crop, audio_config, ['jpn'])
         encodeP = subprocess.Popen(encode_cmd, stdin=subprocess.PIPE, stdout=subprocess.DEVNULL,
-                                   stderr=open('encode.log', 'w'))
+                                   stderr=subprocess.DEVNULL)
 
         with encodeP:
             subsP = _start_subtitles_process(outSubtitles, currentOut)
@@ -132,16 +155,19 @@ def EncodePipeline(inFile: Path, ptsmap_path: Path, markermap_path: Path, outFil
             if noStrip:
                 extractP = subprocess.Popen(extract_cmd, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
                 with subsP, extractP:
-                    Tee(encodeP.stdin, subsP.stdin, broken_ok=(subsP.stdin,)).pump(extractP.stdout)
+                    Tee(encodeP.stdin, subsP.stdin, broken_ok=(subsP.stdin,)).pump(extractP.stdout, buf_size=1024*1024, on_chunk=_on_chunk)
             else:
                 strip_cmd = inputFile.StripTsCmd('-', '-', ['jpn'], fixAudio=fixAudio, audio_config=audio_config)
                 stripP = subprocess.Popen(strip_cmd, stdin=subprocess.PIPE, stdout=encodeP.stdin,
-                                          stderr=open('strip.log', 'w'))
+                                          stderr=subprocess.DEVNULL)
                 extractP = subprocess.Popen(extract_cmd, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
                 with stripP, subsP, extractP:
-                    Tee(stripP.stdin, subsP.stdin, broken_ok=(subsP.stdin,)).pump(extractP.stdout)
+                    Tee(stripP.stdin, subsP.stdin, broken_ok=(subsP.stdin,)).pump(extractP.stdout, buf_size=1024*1024, on_chunk=_on_chunk)
 
-        logger.info('Trying to fix issues in subtitles ...')
+        if progress is not None:
+            progress.done(encode_tid)
+
+        logger.info(f'Normalizing subtitle encoding: {currentOut.name}')
         base = outSubtitles / currentOut.with_suffix('').name
         for suffix in ('.ass', '.srt'):
             sp = base.with_suffix(suffix)

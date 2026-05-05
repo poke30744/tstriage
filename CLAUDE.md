@@ -33,11 +33,11 @@ tstriage is a batch processing pipeline for MPEG2-TS files recorded from TV broa
 4. **input_file** (`tstriage/input_file.py`): Local `InputFile` class with ffmpeg/ffprobe discovery, `GetInfo()`, `StripTsCmd()`, `EncodeTsCmd()`.
 5. **video_info** (`tstriage/video_info.py`): `VideoInfo` dataclass for probe results.
 6. **cli_config** (`tstriage/cli_config.py`): Configurable tscutter/tsmarker command paths, read from config `Cli` section.
-7. **subprocess_utils** (`tstriage/subprocess_utils.py`): `run()`, `run_json()` helpers with error handling.
+7. **subprocess_utils** (`tstriage/subprocess_utils.py`): `run()`, `run_json()`, `run_pipe()` — subprocess execution with PROGRESS protocol support.
 8. **nas** (`tstriage/nas.py`): File discovery and action item management in `_tstriage` folder.
 9. **epgstation** (`tstriage/epgstation.py`): EPGStation API client.
 10. **epg** (`tstriage/epg.py`): EPG data extraction via `mirakurun-epgdump` subprocess.
-11. **common** (`tstriage/common.py`): `CopyWithProgress`, `CopyWithProgress2`.
+11. **_progress** (`tstriage/_progress.py`): `SubprocessProgress` — reads PROGRESS lines from subprocess stderr, updates Rich panel. TTY/non-TTY dual mode.
 
 ### Processing Pipeline
 1. **categorize**: Match unprocessed TS files against EPGStation keywords; create `.categorized`
@@ -85,7 +85,7 @@ tstriage is a batch processing pipeline for MPEG2-TS files recorded from TV broa
    Run the full pipeline on sample data and verify output correctness.
 
 6. **When removing a feature, remove ALL related code.**
-   Deleted `CacheTS` but left `CopyWithProgress2` in common.py — dead code breeds confusion.
+   Dead code breeds confusion — keep the codebase clean.
 
 7. **`uv run --directory <repo>` creates isolated venvs.**
    If repo A depends on repo B, repo B must be installed from local source (not Test PyPI) via `[tool.uv.sources]` in repo A's pyproject.toml.

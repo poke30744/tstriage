@@ -2,10 +2,7 @@ from functools import cache
 import os, subprocess, json, unicodedata, time, re, copy, shutil
 from pathlib import Path
 from typing import Optional
-import logging
 import yaml
-
-logger = logging.getLogger('tstriage.epg')
 
 def represent_str(dumper, instance):
     if "\n" in instance:
@@ -69,7 +66,7 @@ class EPG:
         if quiet:
             subprocess.run(dumpCmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         else:
-            subprocess.run(dumpCmd)
+            subprocess.run(dumpCmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
     def __init__(self, path: Path, service_id: int, channels: Optional[dict]=None) -> None:
         self.path = path

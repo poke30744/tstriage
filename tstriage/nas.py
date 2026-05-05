@@ -1,7 +1,7 @@
 import json
 from pathlib import Path
 from typing import Generator, Optional
-from tqdm import tqdm
+from rich.progress import track
 
 class NAS:
     def __init__(self, recorded: Path, destination: Path):
@@ -11,12 +11,12 @@ class NAS:
     
     def SearchUnprocessedFiles(self) -> list[Path]:
         processedFiles: set[str] = set()
-        for path in tqdm(Path(self.destination).glob('**/*'), desc="Loading encoded files"):
+        for path in track(list(Path(self.destination).glob('**/*')), description="Loading encoded files"):
             if path.suffix in ('.mp4', '.mkv') and (path.parent / '_metadata').exists():
                 processedFiles.add(path.stem.split('_')[0])
 
         unprocessedFiles: list[Path] = []
-        for path in tqdm(Path(self.recorded).glob('*'), desc='Loading recorded files'):
+        for path in track(list(Path(self.recorded).glob('*')), description='Loading recorded files'):
             if path.is_file():
                 if not path.stem in processedFiles and path.suffix in ('.ts', '.m2ts') and not self.HasActionItem(path):
                     unprocessedFiles.append(path)
