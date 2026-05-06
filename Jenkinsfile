@@ -49,6 +49,7 @@ pipeline {
         }
         stage('Deploy') {
             when {
+                branch 'main'
                 expression {params.PublishTestPyPI == true}
             }
             agent {
@@ -71,19 +72,22 @@ pipeline {
         aborted {
             echo 'aborted'
             emailext subject: "ABORTED: Job '${env.JOB_NAME} [${env.BUILD_NUMBER}]'",
-                body: """Job "${env.JOB_NAME} [${env.BUILD_NUMBER}]" aborted\nCheck console output at ${env.BUILD_URL}\n""",
+                body: """Job "${env.JOB_NAME} [${env.BUILD_NUMBER}]" aborted\n\nCommits:\n${currentBuild.changeSets.collect{cs->cs.items.collect{"  ${it.commitId?.take(7) ?: '?'} ${it.msg?.split('\\n')[0] ?: ''}"}.join('\n')}.join('\n')}\n\nCheck console output at ${env.BUILD_URL}\n""",
+                mimeType: 'text/plain',
                 recipientProviders: [[$class: 'DevelopersRecipientProvider'], [$class: 'RequesterRecipientProvider']]
         }
         failure {
             echo 'failure'
             emailext subject: "FAILED: Job '${env.JOB_NAME} [${env.BUILD_NUMBER}]'",
-                body: """Job "${env.JOB_NAME} [${env.BUILD_NUMBER}]" failed\nCheck console output at ${env.BUILD_URL}\n""",
+                body: """Job "${env.JOB_NAME} [${env.BUILD_NUMBER}]" failed\n\nCommits:\n${currentBuild.changeSets.collect{cs->cs.items.collect{"  ${it.commitId?.take(7) ?: '?'} ${it.msg?.split('\\n')[0] ?: ''}"}.join('\n')}.join('\n')}\n\nCheck console output at ${env.BUILD_URL}\n""",
+                mimeType: 'text/plain',
                 recipientProviders: [[$class: 'DevelopersRecipientProvider'], [$class: 'RequesterRecipientProvider']]
         }
         success {
             echo 'success'
             emailext subject: "SUCCEEDED: Job '${env.JOB_NAME} [${env.BUILD_NUMBER}]'",
-                body: """Job "${env.JOB_NAME} [${env.BUILD_NUMBER}]" succeeded\nCheck console output at ${env.BUILD_URL}\n""",
+                body: """Job "${env.JOB_NAME} [${env.BUILD_NUMBER}]" succeeded\n\nCommits:\n${currentBuild.changeSets.collect{cs->cs.items.collect{"  ${it.commitId?.take(7) ?: '?'} ${it.msg?.split('\\n')[0] ?: ''}"}.join('\n')}.join('\n')}\n\nCheck console output at ${env.BUILD_URL}\n""",
+                mimeType: 'text/plain',
                 recipientProviders: [[$class: 'DevelopersRecipientProvider'], [$class: 'RequesterRecipientProvider']]
         }
         cleanup {
