@@ -16,6 +16,7 @@ Batch runner to process MPEG2-TS files
 1. Install dependencies: `uv pip install -e .`
 2. Configure `tstriage.config.yml`
 3. Run the pipeline: `tstriage --config tstriage.config.yml run categorize list analyze mark cut encode confirm cleanup`
+4. Show version: `tstriage --version`
 
 ## Configuration
 

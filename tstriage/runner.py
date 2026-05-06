@@ -12,6 +12,7 @@ from rich.console import Console
 from rich.logging import RichHandler
 from rich.progress import Progress as RichProgress, SpinnerColumn, TextColumn, BarColumn, TimeElapsedColumn, TimeRemainingColumn
 from rich.table import Column
+from . import __version__
 from . import cli_config
 from ._progress import SubprocessProgress, _UnitColumn
 
@@ -314,6 +315,7 @@ def _inject_env_vars(configuration):
 @click.option('--config', '-c', default='tstriage.config.yml', show_default=True, help='Configuration file path')
 @click.option('--quiet', '-q', is_flag=True, help='Suppress non-error output')
 @click.option('--verbose', '-v', is_flag=True, help='Enable debug output')
+@click.version_option(__version__, prog_name='tstriage', message='%(prog)s %(version)s')
 @click.pass_context
 def cli(ctx, config, quiet, verbose):
     """MPEG TS Triage Runner — batch processing pipeline for TV broadcast TS files.
