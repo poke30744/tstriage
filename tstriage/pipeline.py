@@ -1,4 +1,4 @@
-import json, logging, subprocess, tempfile
+import json, logging, shutil, subprocess, tempfile
 from pathlib import Path
 import pysubs2
 import yaml
@@ -87,11 +87,14 @@ def _detect_crop(inFile: Path, ptsmap_path: Path, quiet: bool) -> dict | None:
 
 
 def _start_subtitles_process(out_subtitles: Path, out_file: Path):
+    exe = shutil.which('Caption2AssC.cmd') or shutil.which('Caption2AssC')
+    if exe is None:
+        raise RuntimeError('Caption2AssC not found in PATH — install Caption2AssC or add it to PATH')
     si = subprocess.STARTUPINFO(wShowWindow=6, dwFlags=subprocess.STARTF_USESHOWWINDOW) if hasattr(subprocess, 'STARTUPINFO') else None
     cf = getattr(subprocess, 'CREATE_NO_WINDOW', 0x08000000)
     return subprocess.Popen(
-        f'Caption2AssC.cmd - "{out_subtitles / out_file.with_suffix("").name}"',
-        stdin=subprocess.PIPE, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+        f'"{exe}" - "{out_subtitles / out_file.with_suffix("").name}"',
+        stdin=subprocess.PIPE, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE,
         startupinfo=si, creationflags=cf, shell=True)
 
 
@@ -152,17 +155,39 @@ def EncodePipeline(inFile: Path, ptsmap_path: Path, markermap_path: Path, outFil
             if quiet:
                 extract_cmd.append('--quiet')
 
+            extractP = subprocess.Popen(extract_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+
             if noStrip:
-                extractP = subprocess.Popen(extract_cmd, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
-                with subsP, extractP:
-                    Tee(encodeP.stdin, subsP.stdin, broken_ok=(subsP.stdin,)).pump(extractP.stdout, buf_size=1024*1024, on_chunk=_on_chunk)
+                try:
+                    Tee(encodeP.stdin, subsP.stdin, broken_ok=(subsP.stdin,)).pump(
+                        extractP.stdout, buf_size=1024*1024, on_chunk=_on_chunk)
+                finally:
+                    extractP.wait()
+                    subsP.wait()
             else:
                 strip_cmd = inputFile.StripTsCmd('-', '-', ['jpn'], fixAudio=fixAudio, audio_config=audio_config)
                 stripP = subprocess.Popen(strip_cmd, stdin=subprocess.PIPE, stdout=encodeP.stdin,
                                           stderr=subprocess.DEVNULL)
-                extractP = subprocess.Popen(extract_cmd, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
-                with stripP, subsP, extractP:
-                    Tee(stripP.stdin, subsP.stdin, broken_ok=(subsP.stdin,)).pump(extractP.stdout, buf_size=1024*1024, on_chunk=_on_chunk)
+                try:
+                    Tee(stripP.stdin, subsP.stdin, broken_ok=(subsP.stdin,)).pump(
+                        extractP.stdout, buf_size=1024*1024, on_chunk=_on_chunk)
+                finally:
+                    extractP.wait()
+                    subsP.wait()
+                    stripP.wait()
+                if stripP.returncode != 0:
+                    raise RuntimeError(f'ffmpeg strip failed (exit {stripP.returncode})')
+
+            if extractP.returncode != 0:
+                stderr_text = extractP.stderr.read().decode('utf-8', errors='replace').strip()
+                raise RuntimeError(f'tsmarker extract-clips failed (exit {extractP.returncode}): {stderr_text}')
+            if subsP.returncode != 0:
+                stderr_text = subsP.stderr.read().decode('utf-8', errors='replace').strip()
+                logger.error(f'Caption2AssC failed (exit {subsP.returncode}): {stderr_text}')
+                raise RuntimeError(f'Caption2AssC failed (exit {subsP.returncode})')
+
+        if encodeP.returncode != 0:
+            raise RuntimeError(f'ffmpeg encode failed (exit {encodeP.returncode})')
 
         if progress is not None:
             progress.done(encode_tid)

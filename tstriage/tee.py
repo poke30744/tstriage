@@ -1,3 +1,8 @@
+import logging
+
+logger = logging.getLogger('tstriage.tee')
+
+
 class Tee:
     """Write data from a stream to multiple pipes.
 
@@ -26,6 +31,7 @@ class Tee:
                 p.write(data)
             except (BrokenPipeError, OSError):
                 if p in self.broken_ok:
+                    logger.warning('Subtitle process pipe broken — subtitles may not be generated')
                     broken.add(p)
                 else:
                     raise
