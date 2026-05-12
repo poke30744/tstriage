@@ -1,4 +1,4 @@
-import json, logging, os, subprocess, sys, threading, time
+import json, logging, os, subprocess, sys
 from typing import Optional
 
 logger = logging.getLogger('tstriage.subprocess_utils')
@@ -36,44 +36,26 @@ def run_json(cmd: list[str]) -> Optional[dict]:
 
 
 def run_pipe(cmd: list[str], progress=None):
-    """Execute command, feeding PROGRESS lines from stderr to the progress instance.
-    Main thread stays free so Rich Live display can refresh.
+    """Execute command, feeding PROGRESS lines from stderr to progress.
+    Single-threaded: main thread reads stderr, loop exits when process terminates.
     """
     logger.debug(f'Running: {" ".join(cmd)}')
     try:
-        proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, env=_clean_env())
+        proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                                text=True, encoding='utf-8', errors='replace',
+                                env=_clean_env())
     except FileNotFoundError:
         logger.error(f'Command not found: {cmd[0]}')
         sys.exit(1)
 
-    stdout_chunks: list[str] = []
-    stderr_buffer: list[str] = []
-
-    def _read_stdout():
-        try:
-            stdout_chunks.append(proc.stdout.read())
-        except ValueError:
-            pass
-
-    def _read_stderr():
-        try:
-            for line in proc.stderr:
-                if progress is not None:
-                    progress.feed(line.rstrip('\n'))
-                else:
-                    sys.stderr.write(line)
-                    stderr_buffer.append(line)
-        except ValueError:
-            pass
-
-    t_out = threading.Thread(target=_read_stdout, daemon=True)
-    t_err = threading.Thread(target=_read_stderr, daemon=True)
-    t_out.start()
-    t_err.start()
-
+    stderr_lines: list[str] = []
     try:
-        while proc.poll() is None:
-            time.sleep(0.1)  # keep main thread free for Rich Live refresh
+        for line in proc.stderr:
+            if progress is not None:
+                progress.feed(line.rstrip('\n'))
+            else:
+                sys.stderr.write(line)
+                stderr_lines.append(line)
     except KeyboardInterrupt:
         logger.info('Interrupted, terminating subprocess ...')
         proc.terminate()
@@ -83,15 +65,59 @@ def run_pipe(cmd: list[str], progress=None):
             proc.kill()
             proc.wait()
         raise
-    finally:
-        t_out.join(timeout=2)
-        t_err.join(timeout=2)
+
+    stdout_text = proc.stdout.read()
+    proc.wait()
 
     if proc.returncode != 0:
         logger.error(f'Command failed (exit {proc.returncode}): {" ".join(cmd)}')
         if progress is not None:
             progress.flush_stderr()
-        if stderr_buffer:
-            logger.error(''.join(stderr_buffer).rstrip())
+        if stderr_lines:
+            logger.error(''.join(stderr_lines).rstrip())
         raise RuntimeError(f'Command failed: {cmd[0]} exited with {proc.returncode}')
-    return ''.join(stdout_chunks)
+    return stdout_text
+
+
+def run_long(cmd: list[str], progress=None):
+    """Execute a long-running command (e.g. ffmpeg encode).
+    Reads stderr in single-threaded loop, splits on \\r/\\n for ffmpeg progress.
+    """
+    logger.debug(f'Running: {" ".join(cmd)}')
+    try:
+        proc = subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE,
+                                text=True, encoding='utf-8', errors='replace',
+                                env=_clean_env())
+    except FileNotFoundError:
+        logger.error(f'Command not found: {cmd[0]}')
+        sys.exit(1)
+
+    try:
+        buf = ''
+        while True:
+            chunk = proc.stderr.read(4096)
+            if not chunk:
+                break
+            for ch in chunk:
+                if ch in ('\r', '\n'):
+                    if buf and progress is not None:
+                        progress.feed_ffmpeg(buf)
+                    buf = ''
+                else:
+                    buf += ch
+        if buf and progress is not None:
+            progress.feed_ffmpeg(buf)
+    except KeyboardInterrupt:
+        logger.info('Interrupted, terminating subprocess ...')
+        proc.terminate()
+        try:
+            proc.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            proc.kill()
+            proc.wait()
+        raise
+
+    proc.wait()
+    if proc.returncode != 0:
+        logger.error(f'Command failed (exit {proc.returncode}): {" ".join(cmd)}')
+        raise RuntimeError(f'Command failed: {cmd[0]} exited with {proc.returncode}')

@@ -41,29 +41,6 @@ def test_get_info():
     assert info.dar == (16, 9)
 
 
-def test_strip_ts_cmd_basic():
-    f = InputFile("test.ts")
-    cmd = f.StripTsCmd("in.ts", "out.ts")
-    assert "ffmpeg" in cmd[0]
-    assert "-c:v" in cmd
-    assert "copy" in cmd
-    assert "out.ts" in cmd
-
-
-def test_strip_ts_cmd_fix_audio():
-    f = InputFile("test.ts")
-    cmd = f.StripTsCmd("in.ts", "out.ts", fixAudio=True)
-    assert "aresample=async=1" in cmd
-    assert "-c:a" in cmd
-    assert "aac" in cmd
-
-
-def test_strip_ts_cmd_nomap():
-    f = InputFile("test.ts")
-    cmd = f.StripTsCmd("in.ts", "out.ts", noMap=True)
-    assert "-map" not in cmd
-
-
 def test_encode_ts_cmd_basic():
     f = InputFile("test.ts")
     preset = {'crf': 23, 'videoFilter': ''}
@@ -109,3 +86,26 @@ def test_encode_ts_cmd_dual_mono():
     assert 'channelsplit' in cmd_str
     assert 'language=jpn' in cmd_str
     assert 'language=eng' in cmd_str
+
+
+def test_encode_ts_cmd_with_ss_to():
+    f = InputFile("test.ts")
+    preset = {'crf': 23, 'videoFilter': ''}
+    cmd = f.EncodeTsCmd("in.ts", "out.mkv", preset=preset, encoder="libx264", ss=10.5, to=120.0)
+    # -ss/-to must appear before -i
+    ss_idx = cmd.index('-ss')
+    to_idx = cmd.index('-to')
+    i_idx = cmd.index('-i')
+    assert ss_idx < i_idx
+    assert to_idx < i_idx
+    assert cmd[ss_idx + 1] == '10.5'
+    assert cmd[to_idx + 1] == '120.0'
+
+
+def test_encode_ts_cmd_with_fixaudio():
+    f = InputFile("test.ts")
+    preset = {'crf': 23, 'videoFilter': ''}
+    cmd = f.EncodeTsCmd("in.ts", "out.mkv", preset=preset, encoder="libx264", fixAudio=True)
+    assert 'aresample=async=1' in cmd
+    assert '-c:a' in cmd
+    assert 'aac' in cmd

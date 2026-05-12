@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
 import json, os, socket, sys
-import shutil
 from itertools import chain
 from pathlib import Path
 import logging
@@ -18,7 +17,7 @@ from ._progress import SubprocessProgress, _UnitColumn
 
 console = Console(width=None if sys.stderr.isatty() else sys.maxsize)
 from .epgstation import EPGStation
-from .tasks import Analyze, Mark, Cut, Encode, Confirm, Cleanup
+from .tasks import Encode, Index, Mark, Cut, Confirm, Cleanup
 from .nas import NAS
 
 logger = logging.getLogger('tstriage.runner')
@@ -106,35 +105,35 @@ class Runner:
                     'marker': settings.get('marker', {}),
                     'encoder': settings.get('encoder', {})
                 }
-                self.CreateActionItem(newItem, '.toanalyze')
+                self.CreateActionItem(newItem, '.toencode')
                 logger.info(f'Will process: {item["path"]}')
             else:
                 logger.warning(f'More information is needed: {item["path"]}')
 
-    def Analyze(self):
-        paths = list(self.nas.ActionItems('.toanalyze'))
-        suffix = '.toanalyze'
+    def Index(self):
+        paths = list(self.nas.ActionItems('.toindex'))
+        suffix = '.toindex'
         with RichProgress(
             SpinnerColumn(), TextColumn("{task.description}", table_column=Column(overflow="ellipsis")), _UnitColumn(), BarColumn(), TimeElapsedColumn(), TimeRemainingColumn(),
             console=console, transient=False, refresh_per_second=10
         ) as rich:
-            file_task = rich.add_task("Analyze", total=len(paths))
+            file_task = rich.add_task("Index", total=len(paths))
             for path in paths:
                 item = self.LoadActionItem(path)
                 name = Path(item['path']).stem
-                rich.update(file_task, description=f"Analyze: {name}")
+                rich.update(file_task, description=f"Index: {name}")
                 original = path
                 path = path.rename(path.with_suffix(f'{suffix}.{socket.gethostname()}'))
                 try:
                     progress = SubprocessProgress(rich, ctx=name)
-                    Analyze(item=item, epgStation=self.epgStation, quiet=self.quiet, progress=progress)
+                    Index(item=item, quiet=self.quiet, progress=progress)
                     path.unlink()
                     self.CreateActionItem(item, '.tomark')
                 except KeyboardInterrupt:
                     path.rename(original)
                     raise
                 except:
-                    logger.exception(f'in analyzing "{path}":')
+                    logger.exception(f'in indexing "{path}":')
                     path.rename(path.with_suffix('.error'))
                     raise
                 rich.advance(file_task)
@@ -186,7 +185,7 @@ class Runner:
                     progress = SubprocessProgress(rich, ctx=name)
                     Cut(item=item, outputFolder=outputFolder, quiet=self.quiet, progress=progress)
                     path.unlink()
-                    self.CreateActionItem(item, '.toencode')
+                    self.CreateActionItem(item, '.toconfirm')
                 except KeyboardInterrupt:
                     path.rename(original)
                     raise
@@ -212,11 +211,9 @@ class Runner:
                 path = path.rename(path.with_suffix(f'{suffix}.{socket.gethostname()}'))
                 try:
                     progress = SubprocessProgress(rich, ctx=name)
-                    Encode(item=item, encoder=self.encoder, presets=self.presets, quiet=self.quiet, progress=progress)
+                    Encode(item=item, epgStation=self.epgStation, encoder=self.encoder, presets=self.presets, quiet=self.quiet, progress=progress)
                     path.unlink()
-                    metadataFolder = Path(item['destination']) / '_metadata'
-                    newTriagePath = self.CreateActionItem(item, '.toconfirm')
-                    shutil.copy(newTriagePath, metadataFolder / newTriagePath.with_suffix('.toencode').name)
+                    self.CreateActionItem(item, '.toindex')
                 except KeyboardInterrupt:
                     path.rename(original)
                     raise
@@ -252,8 +249,8 @@ class Runner:
                     self.Categorize()
                 elif task == 'list':
                     self.List()
-                elif task == 'analyze':
-                    self.Analyze()
+                elif task == 'index':
+                    self.Index()
                 elif task == 'mark':
                     self.Mark()
                 elif task == 'cut':
@@ -337,7 +334,7 @@ def cli(ctx, config, quiet, verbose):
         log_level = logging.INFO
     logging.basicConfig(
         level=log_level, format='%(message)s', datefmt='[%X]',
-        handlers=[RichHandler(console=console, rich_tracebacks=True)])
+        handlers=[RichHandler(console=console, rich_tracebacks=sys.stderr.isatty())])
 
     ctx.ensure_object(dict)
     ctx.obj['config'] = config
@@ -370,15 +367,15 @@ def categorize(ctx):
 @cli.command(name='list')
 @click.pass_context
 def list_cmd(ctx):
-    """Convert .categorized items to .toanalyze using tstriage.json settings."""
+    """Convert .categorized items to .toencode using tstriage.json settings."""
     _run_tasks(ctx, ['list'])
 
 
 @cli.command()
 @click.pass_context
-def analyze(ctx):
-    """Run tscutter analyze and tsmarker prepare-subtitles/extract-logo, create .tomark items."""
-    _run_tasks(ctx, ['analyze'])
+def index(ctx):
+    """Run tscutter analyze on encoded MKV, create .tomark items."""
+    _run_tasks(ctx, ['index'])
 
 
 @cli.command()
@@ -391,14 +388,14 @@ def mark(ctx):
 @cli.command()
 @click.pass_context
 def cut(ctx):
-    """Cut CM segments via tsmarker cut, create .toencode items."""
+    """Cut CM segments via tsmarker cut, create .toconfirm items."""
     _run_tasks(ctx, ['cut'])
 
 
 @cli.command()
 @click.pass_context
 def encode(ctx):
-    """Encode program clips to MKV via ffmpeg, create .toconfirm items."""
+    """Encode TS to MKV + extract EPG/logo/ASS, create .toindex items."""
     _run_tasks(ctx, ['encode'])
 
 
@@ -418,14 +415,14 @@ def cleanup(ctx):
 
 @cli.command()
 @click.argument('tasks', nargs=-1, required=True, type=click.Choice([
-    'categorize', 'list', 'analyze', 'mark', 'cut', 'encode', 'confirm', 'cleanup'
+    'categorize', 'list', 'encode', 'index', 'mark', 'cut', 'confirm', 'cleanup'
 ]))
 @click.pass_context
 def run(ctx, tasks):
     """Run multiple pipeline tasks in sequence.
 
     TASKS: one or more task names to execute in order.
-    Example: tstriage run categorize list analyze mark cut encode confirm cleanup
+    Example: tstriage run categorize list encode index mark cut confirm cleanup
     """
     _run_tasks(ctx, list(tasks))
 

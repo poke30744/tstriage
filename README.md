@@ -15,7 +15,7 @@ Batch runner to process MPEG2-TS files
 
 1. Install dependencies: `uv pip install -e .`
 2. Configure `tstriage.config.yml`
-3. Run the pipeline: `tstriage --config tstriage.config.yml run categorize list analyze mark cut encode confirm cleanup`
+3. Run the pipeline: `tstriage --config tstriage.config.yml run categorize list encode index mark cut confirm cleanup`
 4. Show version: `tstriage --version`
 
 ## Configuration
@@ -63,8 +63,7 @@ Key-value pairs injected as environment variables before running any task. Used 
 |---|---|
 | Python | ≥3.13 |
 | ffmpeg / ffprobe | Video encode, probe, audio check |
-| ffmpeg5 | Scene change detection (tscutter analyze) |
-| Caption2AssC | Subtitle extraction |
+| ffmpeg | Subtitle extraction (ARIB→ASS, embedded in MKV during encode) |
 | mirakurun-epgdump | EPG data extraction from TS |
 | EPGStation | HTTP metadata source |
 
@@ -88,11 +87,7 @@ Key packages: tscutter, tsmarker, ffmpeg-python, PyYAML, psutil, pysubs2.
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
 | `preset` | string | `"drama"` | Encode preset name |
-| `bygroup` | bool | `false` | Each clip group → separate MKV |
-| `split` | int | `1` | Split into N output files |
-| `cropdetect` | bool | — | Logo/pillarbox crop detection |
-| `fixaudio` | bool | — | Audio resample fix (auto-set by analyze) |
-| `nostrip` | bool | — | Skip strip step, encode directly |
+| `fixaudio` | bool | — | Audio resample fix (auto-set by encode audio check) |
 
 ## Documentation
 

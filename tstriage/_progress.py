@@ -118,6 +118,23 @@ class SubprocessProgress:
             self._tasks[tid] = self._register(tid, data)
         self._update(tid, data)
 
+    def feed_ffmpeg(self, line: str):
+        """Parse ffmpeg status line for time-based progress."""
+        tid = "ffmpeg_encode"
+        if tid not in self._tasks or not line.startswith("frame="):
+            return
+        for part in line.split():
+            if part.startswith("time="):
+                time_str = part[5:]
+                parts = time_str.split(':')
+                if len(parts) == 3:
+                    try:
+                        seconds = int(parts[0]) * 3600 + int(parts[1]) * 60 + float(parts[2])
+                        self.update(tid, seconds)
+                    except ValueError:
+                        pass
+                return
+
     def flush_stderr(self):
         """Output collected stderr lines (call on command failure)."""
         for line in self._stderr:

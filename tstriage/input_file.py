@@ -39,27 +39,7 @@ class InputFile:
             serviceId = next(p['program_id'] for p in probeInfo['programs'] if p['nb_streams'] > 0),
         )
 
-    def StripTsCmd(self, inFile: str | Path, outFile: str | Path, audioLanguages: list[str] = ['jpn'], fixAudio: bool = False, noMap: bool = False, audio_config: Optional[list[dict]] = None) -> list[str]:
-        args = [
-            self.ffmpeg, '-hide_banner', '-y',
-            '-i', str(inFile),
-            '-c:v', 'copy'
-        ]
-        if fixAudio:
-            args += [
-                '-af',  'aresample=async=1',
-                '-c:a', 'aac', '-ar', '48000', '-ac', '2'
-            ]
-        else:
-            args += [ '-c:a', 'copy' ]
-        if not noMap:
-            args += [ '-map', '0:v', '-map', '0:a', '-ignore_unknown' ]
-            for i in range(len(audioLanguages)):
-                args += [ f'-metadata:s:a:{i}', f'language={audioLanguages[i]}' ]
-        args += [ '-f', 'mpegts', outFile ]
-        return args
-
-    def EncodeTsCmd(self, inPath: str | Path, outPath: str | Path, preset: dict, encoder: str, crop: Optional[dict] = None, audio_config: Optional[list[dict]] = None, audioLanguages: list[str] = ['jpn']) -> list[str]:
+    def EncodeTsCmd(self, inPath: str | Path, outPath: str | Path, preset: dict, encoder: str, crop: Optional[dict] = None, audio_config: Optional[list[dict]] = None, audioLanguages: list[str] = ['jpn'], ss: float = None, to: float = None, fixAudio: bool = False) -> list[str]:
         videoFilter = preset.get('videoFilter') or ''
         if crop:
             filters = videoFilter.split(',') if videoFilter else []
@@ -91,8 +71,12 @@ class InputFile:
             videoCodec = [ '-c:v', encoder, '-crf', str(preset['crf']) ]
         args = [
             self.ffmpeg, '-hide_banner', '-y',
-            '-i', str(inPath)
         ]
+        if ss is not None:
+            args += ['-ss', str(ss)]
+        if to is not None:
+            args += ['-to', str(to)]
+        args += ['-fix_sub_duration', '-i', str(inPath)]
         if len(videoFilter) > 0:
             args += [ '-vf', videoFilter ]
         args += videoCodec
@@ -123,7 +107,14 @@ class InputFile:
                 args += [f'-metadata:s:a:{i}', f'language={lang}']
             args += ['-bsf:a', 'aac_adtstoasc']
         else:
-            args += [ '-c:a', 'copy', '-bsf:a', 'aac_adtstoasc' ]
+            if fixAudio:
+                args += ['-af', 'aresample=async=1', '-c:a', 'aac', '-ar', '48000', '-ac', '2']
+            else:
+                args += ['-c:a', 'copy']
+            args += ['-bsf:a', 'aac_adtstoasc']
             args += [ '-map', '0:v', '-map', '0:a', '-ignore_unknown' ]
-        args += [ outPath ]
+        args += ['-map', '0:s:0', '-c:s', 'ass',
+                 '-metadata:s:s:0', 'language=jpn',
+                 '-disposition:s:0', 'default']
+        args += [ str(outPath) ]
         return args
