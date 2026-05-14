@@ -28,7 +28,7 @@ tsmarker  ──读取──→ .ptsmap (只读，通过 tscutter CLI)
 tstriage (Python, 纯 shell 编排器)
   ├── EncodePipeline (ffmpeg 编码, 自有逻辑)
   ├── EPG 解析 (已是 subprocess)
-  ├── subprocess → tscutter analyze
+  ├── subprocess → tscutter index
   ├── subprocess → tscutter probe
   ├── subprocess → tsmarker extract-clips
   ├── subprocess → tsmarker extract-logo
@@ -85,12 +85,12 @@ CLI stdout 均为紧凑 JSON。
 - 正常退出 code=0，异常 code≠0
 - 数据输出到 stdout（JSON），进度/日志到 stderr
 
-### 1.1 tscutter analyze
+### 1.1 tscutter index
 
 替代 `tscutter.analyze.AnalyzeVideo()`
 
 ```
-tscutter analyze --input <ts_path> --output <ptsmap_path>
+tscutter index --input <ts_path> --output <ptsmap_path>
                  [--length <ms>] [--threshold <dB>] [--shift <sec>]
                  [--quiet]
 ```
@@ -502,7 +502,7 @@ tsmarker cut --video <ts_path> --index <ptsmap_path>
 
 | 函数 | 当前调用 | CLI 替换 |
 |---|---|---|
-| `Analyze()` | `AnalyzeVideo(...)` | `tscutter analyze -i <ts> -o <ptsmap> -l <len> -t <thresh> -s <shift>` |
+| `Analyze()` | `AnalyzeVideo(...)` | `tscutter index -i <ts> -o <ptsmap> -l <len> -t <thresh> -s <shift>` |
 | `Analyze()` | `PrepareSubtitles(...)` | `tsmarker prepare-subtitles -i <ts> -x <ptsmap>` |
 | `Analyze()` | `ExtractLogoPipeline(...)` | `tsmarker extract-logo -i <ts> -x <ptsmap> -o <logo.png>` |
 | `Analyze()` | audio decode check | **保留** (已是 subprocess ffmpeg) |
@@ -663,7 +663,7 @@ tsmarker cut --video <ts_path> --index <ptsmap_path>
 
 | 函数 | 说明 |
 |---|---|
-| `Analyze()` | 调 `tscutter analyze` → `tsmarker prepare-subtitles` → `tsmarker extract-logo` → audio check |
+| `Analyze()` | 调 `tscutter index` → `tsmarker prepare-subtitles` → `tsmarker extract-logo` → audio check |
 | `Mark()` | 调 `tsmarker mark-subtitles/clipinfo/logo/speech` → `tsmarker ensemble-*` |
 | `Cut()` | 调 `tsmarker cut --by auto` |
 | `Confirm()` | 调 `tsmarker groundtruth` |

@@ -36,53 +36,20 @@ def run_json(cmd: list[str]) -> Optional[dict]:
 
 
 def run_pipe(cmd: list[str], progress=None):
-    """Execute command, feeding PROGRESS lines from stderr to progress.
-    Single-threaded: main thread reads stderr, loop exits when process terminates.
+    """Execute command, read stderr line-by-line, feed to progress.feed().
+    Used for tscutter/tsmarker which output PROGRESS JSON lines terminated by \\n.
     """
-    logger.debug(f'Running: {" ".join(cmd)}')
-    try:
-        proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-                                text=True, encoding='utf-8', errors='replace',
-                                env=_clean_env())
-    except FileNotFoundError:
-        logger.error(f'Command not found: {cmd[0]}')
-        sys.exit(1)
-
-    stderr_lines: list[str] = []
-    try:
-        for line in proc.stderr:
-            if progress is not None:
-                progress.feed(line.rstrip('\n'))
-            else:
-                sys.stderr.write(line)
-                stderr_lines.append(line)
-    except KeyboardInterrupt:
-        logger.info('Interrupted, terminating subprocess ...')
-        proc.terminate()
-        try:
-            proc.wait(timeout=5)
-        except subprocess.TimeoutExpired:
-            proc.kill()
-            proc.wait()
-        raise
-
-    stdout_text = proc.stdout.read()
-    proc.wait()
-
-    if proc.returncode != 0:
-        logger.error(f'Command failed (exit {proc.returncode}): {" ".join(cmd)}')
-        if progress is not None:
-            progress.flush_stderr()
-        if stderr_lines:
-            logger.error(''.join(stderr_lines).rstrip())
-        raise RuntimeError(f'Command failed: {cmd[0]} exited with {proc.returncode}')
-    return stdout_text
+    return _run_subprocess(cmd, progress=progress, line_mode=True)
 
 
 def run_long(cmd: list[str], progress=None):
     """Execute a long-running command (e.g. ffmpeg encode).
-    Reads stderr in single-threaded loop, splits on \\r/\\n for ffmpeg progress.
+    Reads stderr in chunks, splits on \\r/\\n, feeds to progress.feed_ffmpeg().
     """
+    return _run_subprocess(cmd, progress=progress, line_mode=False)
+
+
+def _run_subprocess(cmd: list[str], progress=None, line_mode: bool = True):
     logger.debug(f'Running: {" ".join(cmd)}')
     try:
         proc = subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE,
@@ -92,21 +59,37 @@ def run_long(cmd: list[str], progress=None):
         logger.error(f'Command not found: {cmd[0]}')
         sys.exit(1)
 
+    stderr_lines: list[str] = []
+
+    def process_line(line: str):
+        if progress is not None:
+            if line_mode:
+                progress.feed(line)
+            else:
+                progress.feed_ffmpeg(line)
+        else:
+            sys.stderr.write(line + '\n')
+            stderr_lines.append(line + '\n')
+
     try:
-        buf = ''
-        while True:
-            chunk = proc.stderr.read(4096)
-            if not chunk:
-                break
-            for ch in chunk:
-                if ch in ('\r', '\n'):
-                    if buf and progress is not None:
-                        progress.feed_ffmpeg(buf)
-                    buf = ''
-                else:
-                    buf += ch
-        if buf and progress is not None:
-            progress.feed_ffmpeg(buf)
+        if line_mode:
+            for line in proc.stderr:
+                process_line(line.rstrip('\n'))
+        else:
+            buf = ''
+            while True:
+                chunk = proc.stderr.read(4096)
+                if not chunk:
+                    break
+                for ch in chunk:
+                    if ch in ('\r', '\n'):
+                        if buf:
+                            process_line(buf)
+                        buf = ''
+                    else:
+                        buf += ch
+            if buf:
+                process_line(buf)
     except KeyboardInterrupt:
         logger.info('Interrupted, terminating subprocess ...')
         proc.terminate()
@@ -118,6 +101,11 @@ def run_long(cmd: list[str], progress=None):
         raise
 
     proc.wait()
+
     if proc.returncode != 0:
         logger.error(f'Command failed (exit {proc.returncode}): {" ".join(cmd)}')
+        if progress is not None and line_mode:
+            progress.flush_stderr()
+        if stderr_lines:
+            logger.error(''.join(stderr_lines).rstrip())
         raise RuntimeError(f'Command failed: {cmd[0]} exited with {proc.returncode}')

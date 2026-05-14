@@ -126,7 +126,7 @@ class Runner:
                 path = path.rename(path.with_suffix(f'{suffix}.{socket.gethostname()}'))
                 try:
                     progress = SubprocessProgress(rich, ctx=name)
-                    Index(item=item, quiet=self.quiet, progress=progress)
+                    Index(item=item, epgStation=self.epgStation, quiet=self.quiet, progress=progress)
                     path.unlink()
                     self.CreateActionItem(item, '.tomark')
                 except KeyboardInterrupt:
@@ -319,11 +319,11 @@ def cli(ctx, config, quiet, verbose):
 
     Processes recorded TS files through the pipeline:
 
-    categorize -> list -> analyze -> mark -> cut -> encode -> confirm -> cleanup
+    categorize -> list -> index -> mark -> cut -> encode -> confirm -> cleanup
 
     \b
     Examples:
-      tstriage run categorize list analyze mark cut encode confirm cleanup
+      tstriage run categorize list index mark cut encode confirm cleanup
       tstriage categorize                             # single task
     """
     if verbose:
@@ -374,7 +374,7 @@ def list_cmd(ctx):
 @cli.command()
 @click.pass_context
 def index(ctx):
-    """Run tscutter analyze on encoded MKV, create .tomark items."""
+    """Run tscutter index on encoded MKV, create .tomark items."""
     _run_tasks(ctx, ['index'])
 
 

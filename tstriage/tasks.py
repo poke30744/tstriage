@@ -74,30 +74,6 @@ def Encode(item: dict[str, Any], epgStation: EPGStation, encoder: str, presets: 
     yamlPath = destination / workingPath.with_suffix('.yaml').name
     epg.OutputDesc(yamlPath)
 
-    # 5. Logo extraction from original TS (needs real ptsmap for clip selection)
-    logoPath = (path.parent / '_tstriage' / f'{epg.Channel()}_{probe_data["width"]}x{probe_data["height"]}').with_suffix('.png')
-    if not logoPath.exists():
-        temp_ptsmap = metadata / f'{workingPath.stem}.temp.ptsmap'
-        minSilenceLen = item.get('cutter', {}).get('minSilenceLen', 800)
-        silenceThresh = item.get('cutter', {}).get('silenceThresh', -80)
-        splitPosShift = item.get('cutter', {}).get('splitPosShift', 1)
-        run_pipe(cli_config.tscutter(
-            *_pq(quiet), 'analyze',
-            '--input', str(workingPath),
-            '--output', str(temp_ptsmap),
-            '--length', str(minSilenceLen),
-            '--threshold', str(silenceThresh),
-            '--shift', str(splitPosShift),
-        ), progress=progress)
-        run_pipe(cli_config.tsmarker(
-            *_pq(quiet), 'extract-logo',
-            '--input', str(workingPath),
-            '--index', str(temp_ptsmap),
-            '--output', str(logoPath),
-            '--max-time', '999999',
-        ), progress=progress)
-        temp_ptsmap.unlink(missing_ok=True)
-
     if progress:
         progress.clear_parent_desc()
 
@@ -161,24 +137,41 @@ def Encode(item: dict[str, Any], epgStation: EPGStation, encoder: str, presets: 
         tmpAss.unlink()
 
 
-def Index(item: dict[str, Any], quiet: bool, progress: SubprocessProgress | None = None):
-    """Step 2: tscutter analyze on encoded MKV → .ptsmap."""
+def Index(item: dict[str, Any], epgStation: EPGStation, quiet: bool, progress: SubprocessProgress | None = None):
+    """Step 2: tscutter index on encoded MKV → .ptsmap + logo extraction."""
     destination = Path(item['destination'])
     workingPath = destination / Path(item['path']).with_suffix('.mkv').name
-    indexPath = destination / '_metadata' / workingPath.with_suffix('.ptsmap').name
+    metadata = destination / '_metadata'
+    indexPath = metadata / workingPath.with_suffix('.ptsmap').name
 
     minSilenceLen = item.get('cutter', {}).get('minSilenceLen', 800)
     silenceThresh = item.get('cutter', {}).get('silenceThresh', -80)
     splitPosShift = item.get('cutter', {}).get('splitPosShift', 1)
 
     run_pipe(cli_config.tscutter(
-        *_pq(quiet), 'analyze',
+        *_pq(quiet), 'index',
         '--input', str(workingPath),
         '--output', str(indexPath),
         '--length', str(minSilenceLen),
         '--threshold', str(silenceThresh),
         '--shift', str(splitPosShift),
     ), progress=progress)
+
+    # Logo extraction (moved from encode — reuses this ptsmap)
+    probe_data = run_json(cli_config.tscutter('probe', '--input', str(workingPath)))
+    if probe_data is None:
+        raise RuntimeError('tscutter probe failed in index')
+    epgPath = metadata / Path(item['path']).with_suffix('.epg').name
+    epg = EPG(epgPath, probe_data['serviceId'], epgStation.GetChannels())
+    logoPath = (Path(item['path']).parent / '_tstriage' / f'{epg.Channel()}_{probe_data["width"]}x{probe_data["height"]}').with_suffix('.png')
+    if not logoPath.exists():
+        run_pipe(cli_config.tsmarker(
+            *_pq(quiet), 'extract-logo',
+            '--input', str(workingPath),
+            '--index', str(indexPath),
+            '--output', str(logoPath),
+            '--max-time', '999999',
+        ), progress=progress)
 
 
 def Mark(item: dict[str, Any], epgStation: EPGStation, quiet: bool, progress: SubprocessProgress | None = None):

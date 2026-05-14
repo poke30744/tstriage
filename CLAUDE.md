@@ -2,6 +2,10 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Development
+
+- **Always use `uv run --directory C:\repos\tscutter tscutter ...` and `uv run --directory C:\repos\tsmarker tsmarker ...`** for local development. Never rely on installed packages — the repos at `C:\repos\tscutter` and `C:\repos\tsmarker` are the source of truth.
+
 ## Common Development Commands
 
 ### Installation and Setup
@@ -28,7 +32,7 @@ tstriage is a batch processing pipeline for MPEG2-TS files recorded from TV broa
 
 ### Core Modules
 1. **runner** (`tstriage/runner.py`): Main entry point. Parses CLI arguments, loads YAML configuration, injects environment variables, and executes tasks via the `Runner` class.
-2. **tasks** (`tstriage/tasks.py`): Individual processing steps: `Encode` (TS→MKV + EPG/logo/ASS/YAML/audio), `Index` (tscutter analyze), `Mark` (+EDL), `Cut`, `Confirm` (+EDL), `Cleanup`.
+2. **tasks** (`tstriage/tasks.py`): Individual processing steps: `Encode` (TS→MKV + EPG/logo/ASS/YAML/audio), `Index` (tscutter index), `Mark` (+EDL), `Cut`, `Confirm` (+EDL), `Cleanup`.
 3. **input_file** (`tstriage/input_file.py`): Local `InputFile` class with ffmpeg/ffprobe discovery, `GetInfo()`, `EncodeTsCmd()`.
 4. **video_info** (`tstriage/video_info.py`): `VideoInfo` dataclass for probe results.
 6. **cli_config** (`tstriage/cli_config.py`): Configurable tscutter/tsmarker command paths, read from config `Cli` section.
@@ -42,7 +46,7 @@ tstriage is a batch processing pipeline for MPEG2-TS files recorded from TV broa
 1. **categorize**: Match unprocessed TS files against EPGStation keywords; create `.categorized`
 2. **list**: Convert `.categorized` to `.toencode` using `tstriage.json` settings
 3. **encode**: TS→MKV encoding + EPG/YAML/logo extraction + audio check + ASS embed with fixed background and end-time truncation (via post-encode extract→fix→remux); create `.toindex`
-4. **index**: `tscutter analyze` on MKV (histogram scene-change) → `.ptsmap`; create `.tomark`
+4. **index**: `tscutter index` on MKV (histogram scene-change) → `.ptsmap`; create `.tomark`
 5. **mark**: `tsmarker mark` (subtitles/clipinfo/logo/speech/ensemble) + speech-to-text + EDL; create `.tocut`
 6. **cut**: `tsmarker cut` on MKV → clips/ folder; create `.toconfirm`
 7. **confirm**: `tsmarker groundtruth` from clips/ → regenerate EDL; create `.tocleanup`
@@ -53,7 +57,7 @@ tstriage is a batch processing pipeline for MPEG2-TS files recorded from TV broa
 - **Logo detection**: NCC (normalized cross-correlation) on raw pixel templates, replacing edge-based AND comparison. Logo stored as full-frame grayscale mean image during encode. Region auto-detected at mark time via edge-density scanning. `maxTimeToExtract` increased to 60s.
 - **Scene-change detection**: Histogram chi-squared distance (64-bin grayscale) replaces SAD. Codec-agnostic, no I-frame dependency. Frames extracted at 2fps.
 - **CM classification**: `_auto_by_method`: `_groundtruth > _ensemble > speech > logo > subtitles`. Falls back to `logo` when subtitles have no signal (all 0.0 or 0.5).
-- **Index on MKV**: tscutter analyze runs on the encoded MKV for generality. The histogram algorithm works correctly across mpeg2video/h264 codec differences.
+- **Index on MKV**: tscutter index runs on the encoded MKV for generality. The histogram algorithm works correctly across mpeg2video/h264 codec differences.
 - **ASS embedded in MKV**: subtitles embedded with `language=jpn, default` disposition. tsmarker reads ASS from MKV via ffmpeg extraction. No standalone `.ass.original` file needed.
 - **EDL format**: Kodi MPlayer EDL (seconds, space-separated, action=3 for CM breaks). Adjacent CM clips are merged into single EDL entries.
 - **WAV extraction**: `aresample=async=1` filter removed — it distorted MKV raw AAC timing by ~0.9s compared to TS ADTS AAC.

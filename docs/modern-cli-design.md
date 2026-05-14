@@ -545,7 +545,7 @@ pipeline {
 ## 验证
 
 1. 本地运行 `tstriage --task analyze`——验证 Rich 统一面板显示，子进程进度条协调更新
-2. 本地运行 `tscutter analyze --input test.m2ts`——验证独立运行时 Rich 进度条正常
+2. 本地运行 `tscutter index --input test.m2ts`——验证独立运行时 Rich 进度条正常
 3. 本地运行 `tstriage --quiet --task analyze`——验证进度条和 INFO 日志被抑制
 4. 本地运行 `tstriage --verbose --task analyze`——验证 DEBUG 日志出现
 5. 模拟 Jenkins 环境运行（`TERM=dumb` 或管道）——验证无 ANSI 乱码，纯文本 start/done 日志
