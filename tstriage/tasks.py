@@ -2,6 +2,8 @@ import contextlib, json, logging, shutil, subprocess
 from pathlib import Path
 from typing import Any
 
+import yaml
+
 from . import cli_config
 from ._progress import SubprocessProgress
 from .epg import EPG
@@ -137,7 +139,7 @@ def Encode(item: dict[str, Any], epgStation: EPGStation, encoder: str, presets: 
         tmpAss.unlink()
 
 
-def Index(item: dict[str, Any], epgStation: EPGStation, quiet: bool, progress: SubprocessProgress | None = None):
+def Index(item: dict[str, Any], quiet: bool, progress: SubprocessProgress | None = None):
     """Step 2: tscutter index on encoded MKV → .ptsmap + logo extraction."""
     destination = Path(item['destination'])
     workingPath = destination / Path(item['path']).with_suffix('.mkv').name
@@ -161,9 +163,11 @@ def Index(item: dict[str, Any], epgStation: EPGStation, quiet: bool, progress: S
     probe_data = run_json(cli_config.tscutter('probe', '--input', str(workingPath)))
     if probe_data is None:
         raise RuntimeError('tscutter probe failed in index')
-    epgPath = metadata / Path(item['path']).with_suffix('.epg').name
-    epg = EPG(epgPath, probe_data['serviceId'], epgStation.GetChannels())
-    logoPath = (Path(item['path']).parent / '_tstriage' / f'{epg.Channel()}_{probe_data["width"]}x{probe_data["height"]}').with_suffix('.png')
+    yamlPath = destination / Path(item['path']).with_suffix('.yaml').name
+    with yamlPath.open(encoding='utf-8') as f:
+        yaml_data = yaml.safe_load(f)
+    channel = yaml_data.get('serviceId_desc') or f'sid-{yaml_data["serviceId"]}'
+    logoPath = (Path(item['path']).parent / '_tstriage' / f'{channel}_{probe_data["width"]}x{probe_data["height"]}').with_suffix('.png')
     if not logoPath.exists():
         run_pipe(cli_config.tsmarker(
             *_pq(quiet), 'extract-logo',

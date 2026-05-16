@@ -126,7 +126,7 @@ class Runner:
                 path = path.rename(path.with_suffix(f'{suffix}.{socket.gethostname()}'))
                 try:
                     progress = SubprocessProgress(rich, ctx=name)
-                    Index(item=item, epgStation=self.epgStation, quiet=self.quiet, progress=progress)
+                    Index(item=item, quiet=self.quiet, progress=progress)
                     path.unlink()
                     self.CreateActionItem(item, '.tomark')
                 except KeyboardInterrupt:
