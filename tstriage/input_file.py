@@ -70,7 +70,7 @@ class InputFile:
         else:
             videoCodec = [ '-c:v', encoder, '-crf', str(preset['crf']) ]
         args = [
-            self.ffmpeg, '-hide_banner', '-y',
+            self.ffmpeg, '-hide_banner', '-y', '-nostats', '-progress', 'pipe:2',
         ]
         if ss is not None:
             args += ['-ss', str(ss)]

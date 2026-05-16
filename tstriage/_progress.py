@@ -16,6 +16,17 @@ from rich import filesize as _filesize
 logger = logging.getLogger('tstriage.progress')
 
 
+def _parse_ffmpeg_time(time_str: str) -> float | None:
+    """Parse HH:MM:SS[.fraction] → seconds."""
+    parts = time_str.split(':')
+    if len(parts) == 3:
+        try:
+            return int(parts[0]) * 3600 + int(parts[1]) * 60 + float(parts[2])
+        except ValueError:
+            return None
+    return None
+
+
 class _UnitColumn(ProgressColumn):
     """Progress column that formats completed/total according to unit."""
 
@@ -119,21 +130,26 @@ class SubprocessProgress:
         self._update(tid, data)
 
     def feed_ffmpeg(self, line: str):
-        """Parse ffmpeg status line for time-based progress."""
+        """Parse ffmpeg -progress output or legacy status line for time-based progress."""
         tid = "ffmpeg_encode"
-        if tid not in self._tasks or not line.startswith("frame="):
+        if tid not in self._tasks:
             return
-        for part in line.split():
-            if part.startswith("time="):
-                time_str = part[5:]
-                parts = time_str.split(':')
-                if len(parts) == 3:
-                    try:
-                        seconds = int(parts[0]) * 3600 + int(parts[1]) * 60 + float(parts[2])
-                        self.update(tid, seconds)
-                    except ValueError:
-                        pass
-                return
+        # -progress format: out_time=HH:MM:SS.xxxxxx
+        if line.startswith("out_time="):
+            time_str = line.split('=', 1)[1]
+            parsed = _parse_ffmpeg_time(time_str)
+            if parsed is not None:
+                self.update(tid, parsed)
+            return
+        # Legacy format: frame=... time=HH:MM:SS.MS ...
+        if line.startswith("frame="):
+            for part in line.split():
+                if part.startswith("time="):
+                    time_str = part[5:]
+                    parsed = _parse_ffmpeg_time(time_str)
+                    if parsed is not None:
+                        self.update(tid, parsed)
+                    return
 
     def flush_stderr(self):
         """Output collected stderr lines (call on command failure)."""
