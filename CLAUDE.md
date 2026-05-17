@@ -47,7 +47,7 @@ tstriage is a batch processing pipeline for MPEG2-TS files recorded from TV broa
 2. **list**: Convert `.categorized` to `.toencode` using `tstriage.json` settings
 3. **encode**: TS→MKV encoding + EPG/YAML/logo extraction + audio check + ASS embed with fixed background and end-time truncation (via post-encode extract→fix→remux); create `.toindex`
 4. **index**: `tscutter index` on MKV (histogram scene-change) → `.ptsmap`; create `.tomark`
-5. **mark**: `tsmarker mark` (subtitles/clipinfo/logo/speech/ensemble) + speech-to-text + EDL; create `.tocut`
+5. **mark**: `tsmarker mark` (subtitles/clipinfo/logo/speech/ensemble) + whisper STT → `.generated.srt` + EDL; create `.tocut`
 6. **cut**: `tsmarker cut` on MKV → clips/ folder; create `.toconfirm`
 7. **confirm**: `tsmarker groundtruth` from clips/ → regenerate EDL; create `.tocleanup`
 8. **cleanup**: Remove temporary cache files

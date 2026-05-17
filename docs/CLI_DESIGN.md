@@ -57,7 +57,7 @@ tsmarker CLI (Python, 自主项目)
   ├── extract-clips: 读 .ptsmap → 按 byte range 提取 TS (stdout / 文件)
   ├── extract-logo: TS + .ptsmap → 台标边缘图 PNG
   ├── crop-detect: logo PNG → crop 参数 JSON
-  ├── prepare-subtitles: TS + .ptsmap → .ass.original + .assgen
+  ├── prepare-subtitles: TS + .ptsmap → .generated.srt
   ├── mark-*: 标记 .markermap (subtitles/clipinfo/logo/speech/ensemble)
   ├── ensemble-*: 集成学习训练与预测
   ├── groundtruth: 人工校验 → 标记 _groundtruth
@@ -279,15 +279,14 @@ tsmarker prepare-subtitles --input <ts_path> --index <ptsmap_path> [--quiet]
 ```
 
 输出文件（放在 ptsmap 同级目录）:
-- `<stem>.ass.original` — Caption2AssC 提取的字幕
-- `<stem>.assgen` — Google STT 生成的文本 JSON
+- `<stem>.generated.srt` — faster-whisper 生成的 ASS 字幕（带时间戳）
 
 内部流程:
 1. 调 `tscutter list-clips -x <ptsmap>` 获取 clip 列表
 2. 整个 TS 文件管道喂给 Caption2AssC（4 行标准文件读取，不需要 CopyPartPipe）
 3. 对每个 clip 提取字幕文本
-4. 无字幕的 clip → ffmpeg 提取 WAV → Google Speech Recognition
-5. 写入 `.assgen`
+4. 无字幕的 clip → 合并连续 clip → ffmpeg 提取 WAV → faster-whisper STT
+5. 写入 `.generated.srt`
 
 ### 2.5 tsmarker mark-subtitles
 
@@ -341,7 +340,7 @@ tsmarker mark-speech --video <ts_path> --index <ptsmap_path>
 
 行为:
 1. 调 `tscutter list-clips -x <ptsmap>` 获取 clip 列表
-2. 读取 `.ass.original` / `.assgen`（不存在则自动生成）
+2. 从 MKV 读取原始字幕 / 读取 `.generated.srt`（不存在则自动生成）
 3. 提取每个 clip 文本
 4. POST JSON 到 `--api-url`
 5. 写入 `speech` 字段
@@ -641,7 +640,7 @@ tsmarker cut --video <ts_path> --index <ptsmap_path>
 | `extract-clips` | TS + `.ptsmap` + clips JSON | stdout TS / `.ts` 文件 | 按 byte range 提取 TS 数据 |
 | `extract-logo` | TS + `.ptsmap` | PNG | 台标边缘检测图 |
 | `crop-detect` | logo PNG | stdout JSON | 检测画幅裁剪参数 |
-| `prepare-subtitles` | TS + `.ptsmap` | `.ass.original` + `.assgen` | 字幕提取 + 语音识别 |
+| `prepare-subtitles` | TS + `.ptsmap` | `.generated.srt` | 语音识别生成字幕 |
 | `mark-subtitles` | TS + `.ptsmap` | `.markermap` (原地修改) | 字幕检测标记 |
 | `mark-clipinfo` | TS + `.ptsmap` | `.markermap` (原地修改) | clip 位置/时长标记 |
 | `mark-logo` | TS + `.ptsmap` + logo PNG | `.markermap` (原地修改) | 台标检测标记 |
