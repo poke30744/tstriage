@@ -37,7 +37,7 @@ tstriage (Python, 纯 shell 编排器)
   ├── subprocess → tsmarker mark-subtitles
   ├── subprocess → tsmarker mark-clipinfo
   ├── subprocess → tsmarker mark-logo
-  ├── subprocess → tsmarker mark-speech
+  ├── subprocess → tsmarker mark --method speech
   ├── subprocess → tsmarker ensemble-dataset
   ├── subprocess → tsmarker ensemble-train
   ├── subprocess → tsmarker ensemble-predict
@@ -58,6 +58,7 @@ tsmarker CLI (Python, 自主项目)
   ├── extract-logo: TS + .ptsmap → 台标边缘图 PNG
   ├── crop-detect: logo PNG → crop 参数 JSON
   ├── prepare-subtitles: TS + .ptsmap → .generated.srt
+  ├── correct-srt: .generated.srt + .yaml → .corrected.srt (LLM 同音错误修正)
   ├── mark-*: 标记 .markermap (subtitles/clipinfo/logo/speech/ensemble)
   ├── ensemble-*: 集成学习训练与预测
   ├── groundtruth: 人工校验 → 标记 _groundtruth
@@ -279,7 +280,8 @@ tsmarker prepare-subtitles --input <ts_path> --index <ptsmap_path> [--quiet]
 ```
 
 输出文件（放在 ptsmap 同级目录）:
-- `<stem>.generated.srt` — faster-whisper 生成的 ASS 字幕（带时间戳）
+- `<stem>.generated.srt` — faster-whisper 生成的字幕（带时间戳）
+- `<stem>.corrected.srt` — LLM 修正后的字幕（mark speech 时自动生成）
 
 内部流程:
 1. 调 `tscutter list-clips -x <ptsmap>` 获取 clip 列表
@@ -330,19 +332,18 @@ tsmarker mark-logo --video <ts_path> --index <ptsmap_path>
 4. score ≤ 0.5 时用全长重试一次
 5. 写回 markermap
 
-### 2.8 tsmarker mark-speech
+### 2.8 tsmarker mark --method speech
 
 ```
-tsmarker mark-speech --video <ts_path> --index <ptsmap_path>
-                     --marker <markermap_path> --api-url <url>
-                     [--quiet]
+tsmarker mark --method speech --input <video_path> --index <ptsmap_path>
+              --marker <markermap_path>
 ```
 
 行为:
-1. 调 `tscutter list-clips -x <ptsmap>` 获取 clip 列表
-2. 从 MKV 读取原始字幕 / 读取 `.generated.srt`（不存在则自动生成）
-3. 提取每个 clip 文本
-4. POST JSON 到 `--api-url`
+1. 若 `.generated.srt` 不存在 → whisper STT 生成
+2. 若 `.corrected.srt` 不存在 → LLM 修正 `.generated.srt`（三层检测）
+3. 从 `.corrected.srt`（或回退 `.generated.srt`）提取每个 clip 文本
+4. 利用 YAML 元数据作为上下文，调用 LLM 进行 speech 分类
 5. 写入 `speech` 字段
 
 ### 2.9 tsmarker ensemble-dataset
@@ -641,10 +642,11 @@ tsmarker cut --video <ts_path> --index <ptsmap_path>
 | `extract-logo` | TS + `.ptsmap` | PNG | 台标边缘检测图 |
 | `crop-detect` | logo PNG | stdout JSON | 检测画幅裁剪参数 |
 | `prepare-subtitles` | TS + `.ptsmap` | `.generated.srt` | 语音识别生成字幕 |
+| `correct-srt` | `.generated.srt` + `.yaml` | `.corrected.srt` | LLM 同音错误修正 |
 | `mark-subtitles` | TS + `.ptsmap` | `.markermap` (原地修改) | 字幕检测标记 |
 | `mark-clipinfo` | TS + `.ptsmap` | `.markermap` (原地修改) | clip 位置/时长标记 |
 | `mark-logo` | TS + `.ptsmap` + logo PNG | `.markermap` (原地修改) | 台标检测标记 |
-| `mark-speech` | TS + `.ptsmap` + API URL | `.markermap` (原地修改) | 语音内容标记 |
+| `mark-speech` | TS + `.ptsmap` + YAML | `.markermap` (原地修改) | LLM 语音内容标记（含 SRT 修正） |
 | `ensemble-dataset` | 搜索目录 | CSV | 生成集成学习数据集 |
 | `ensemble-train` | CSV | model.pkl | 训练集成模型 |
 | `ensemble-predict` | model + `.ptsmap` | `.markermap` (原地修改) | 集成预测标记 |
