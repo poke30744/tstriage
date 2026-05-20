@@ -58,7 +58,8 @@ tsmarker CLI (Python, 自主项目)
   ├── extract-logo: TS + .ptsmap → 台标边缘图 PNG
   ├── crop-detect: logo PNG → crop 参数 JSON
   ├── prepare-subtitles: TS + .ptsmap → .generated.srt
-  ├── correct-srt: .generated.srt + .yaml → .corrected.srt (LLM 同音错误修正)
+  ├── correct-srt: .generated.srt + .yaml → .corrected.srt (LLM 同音错误修正, 之后自动 fix-srt-gaps)
+  ├── fix-srt-gaps: .corrected.srt → 原地修正 end-time gap (faster-whisper VAD bug #1119 补救)
   ├── mark-*: 标记 .markermap (subtitles/clipinfo/logo/speech/ensemble)
   ├── ensemble-*: 集成学习训练与预测
   ├── groundtruth: 人工校验 → 标记 _groundtruth
