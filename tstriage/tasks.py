@@ -56,13 +56,15 @@ def Analyze(item: dict[str, Any], epgStation: EPGStation, quiet: bool, progress:
     epg = EPG(epgPath, probe_data['serviceId'], epgStation.GetChannels())
     epg.OutputDesc(destination / workingPath.with_suffix('.yaml').name)
 
-    if progress:
-        progress.clear_parent_desc()
-    run_pipe(cli_config.tsmarker(
-        *_pq(quiet), 'prepare-subtitles',
-        '--input', str(workingPath),
-        '--index', str(indexPath),
-    ), progress=progress)
+    noStt = item.get('cutter', {}).get('noStt', False)
+    if not noStt:
+        if progress:
+            progress.clear_parent_desc()
+        run_pipe(cli_config.tsmarker(
+            *_pq(quiet), 'prepare-subtitles',
+            '--input', str(workingPath),
+            '--index', str(indexPath),
+        ), progress=progress)
 
     logoPath = (path.parent / '_tstriage' / f'{epg.Channel()}_{probe_data["width"]}x{probe_data["height"]}').with_suffix('.png')
     if not logoPath.exists():

@@ -80,6 +80,7 @@ Key packages: tscutter, tsmarker, ffmpeg-python, PyYAML, psutil, pysubs2.
 
 ```json
 {
+  "cutter": {"noStt": false},
   "marker": {"noEnsemble": true},
   "encoder": {"preset": "drama"}
 }
@@ -87,6 +88,7 @@ Key packages: tscutter, tsmarker, ffmpeg-python, PyYAML, psutil, pysubs2.
 
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
+| `noStt` | bool | `false` | Skip speech-to-text in analyze |
 | `preset` | string | `"drama"` | Encode preset name |
 | `bygroup` | bool | `false` | Each clip group → separate MKV |
 | `split` | int | `1` | Split into N output files |
