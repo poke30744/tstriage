@@ -130,26 +130,15 @@ class SubprocessProgress:
         self._update(tid, data)
 
     def feed_ffmpeg(self, line: str):
-        """Parse ffmpeg -progress output or legacy status line for time-based progress."""
+        """Parse ffmpeg -progress pipe:2 output (out_time=HH:MM:SS.xxxxxx)."""
         tid = "ffmpeg_encode"
         if tid not in self._tasks:
             return
-        # -progress format: out_time=HH:MM:SS.xxxxxx
         if line.startswith("out_time="):
             time_str = line.split('=', 1)[1]
             parsed = _parse_ffmpeg_time(time_str)
             if parsed is not None:
                 self.update(tid, parsed)
-            return
-        # Legacy format: frame=... time=HH:MM:SS.MS ...
-        if line.startswith("frame="):
-            for part in line.split():
-                if part.startswith("time="):
-                    time_str = part[5:]
-                    parsed = _parse_ffmpeg_time(time_str)
-                    if parsed is not None:
-                        self.update(tid, parsed)
-                    return
 
     def flush_stderr(self):
         """Output collected stderr lines (call on command failure)."""

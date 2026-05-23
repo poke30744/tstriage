@@ -44,7 +44,7 @@ def run_pipe(cmd: list[str], progress=None):
 
 def run_long(cmd: list[str], progress=None):
     """Execute a long-running command (e.g. ffmpeg encode).
-    Reads stderr in chunks, splits on \\r/\\n, feeds to progress.feed_ffmpeg().
+    Reads stderr line-by-line, feeds to progress.feed_ffmpeg().
     """
     return _run_subprocess(cmd, progress=progress, line_mode=False)
 
@@ -61,35 +61,19 @@ def _run_subprocess(cmd: list[str], progress=None, line_mode: bool = True):
 
     stderr_lines: list[str] = []
 
+    feed_fn = progress.feed if (progress is not None and line_mode) else \
+              progress.feed_ffmpeg if progress is not None else None
+
     def process_line(line: str):
-        if progress is not None:
-            if line_mode:
-                progress.feed(line)
-            else:
-                progress.feed_ffmpeg(line)
+        if feed_fn is not None:
+            feed_fn(line)
         else:
             sys.stderr.write(line + '\n')
             stderr_lines.append(line + '\n')
 
     try:
-        if line_mode:
-            for line in proc.stderr:
-                process_line(line.rstrip('\n'))
-        else:
-            buf = ''
-            while True:
-                chunk = proc.stderr.read(4096)
-                if not chunk:
-                    break
-                for ch in chunk:
-                    if ch in ('\r', '\n'):
-                        if buf:
-                            process_line(buf)
-                        buf = ''
-                    else:
-                        buf += ch
-            if buf:
-                process_line(buf)
+        for line in proc.stderr:
+            process_line(line.rstrip('\n'))
     except KeyboardInterrupt:
         logger.info('Interrupted, terminating subprocess ...')
         proc.terminate()

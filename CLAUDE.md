@@ -62,7 +62,7 @@ tstriage is a batch processing pipeline for MPEG2-TS files recorded from TV broa
 - **EDL format**: Kodi MPlayer EDL (seconds, space-separated, action=3 for CM breaks). Adjacent CM clips are merged into single EDL entries.
 - **WAV extraction**: `aresample=async=1` filter removed — it distorted MKV raw AAC timing by ~0.9s compared to TS ADTS AAC.
 - **ASS background + end time**: After encode, ASS extracted from MKV, BackColour fixed (`&H0`→`&H80000000`), end times exceeding video duration truncated to actual duration, then remuxed back into MKV with `-map_metadata 0`.
-- **Subprocess**: `run_long()` for ffmpeg encode — single-threaded stderr read, parses `time=` for progress. `run_pipe()` for tscutter/tsmarker — single-threaded PROGRESS line reader. No threading, no PIPE deadlock.
+- **Subprocess**: `run_long()` for ffmpeg encode — single-threaded stderr read, parses `out_time=` from `-progress pipe:2` for progress. `run_pipe()` for tscutter/tsmarker — single-threaded PROGRESS line reader. No threading, no PIPE deadlock.
 - **Confirm simplified**: no longer reports "Re-encoding is needed!", just updates groundtruth and regenerates EDL.
 
 ### Configuration
