@@ -124,6 +124,9 @@ class InputFile:
             args += ['-bsf:a', 'aac_adtstoasc']
         else:
             args += [ '-c:a', 'copy', '-bsf:a', 'aac_adtstoasc' ]
-            args += [ '-map', '0:v', '-map', '0:a', '-ignore_unknown' ]
+            if audio_config and len(audio_config) == 1:
+                args += [ '-map', '0:v', '-map', '0:a:0', '-ignore_unknown' ]
+            else:
+                args += [ '-map', '0:v', '-map', '0:a', '-ignore_unknown' ]
         args += [ outPath ]
         return args
