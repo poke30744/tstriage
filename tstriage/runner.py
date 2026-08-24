@@ -16,7 +16,7 @@ from . import __version__
 from . import cli_config
 from ._progress import SubprocessProgress, _UnitColumn
 
-console = Console(width=None if sys.stderr.isatty() else sys.maxsize)
+console = Console(width=None if sys.stderr.isatty() else 200)
 from .epgstation import EPGStation
 from .tasks import Analyze, Mark, Cut, Encode, Confirm, Cleanup
 from .nas import NAS
