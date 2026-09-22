@@ -114,6 +114,7 @@ class Runner:
     def Analyze(self):
         paths = list(self.nas.ActionItems('.toanalyze'))
         suffix = '.toanalyze'
+        failed = []
         with RichProgress(
             SpinnerColumn(), TextColumn("{task.description}", table_column=Column(overflow="ellipsis")), _UnitColumn(), BarColumn(), TimeElapsedColumn(), TimeRemainingColumn(),
             console=console, transient=False, refresh_per_second=10
@@ -136,12 +137,15 @@ class Runner:
                 except:
                     logger.exception(f'in analyzing "{path}":')
                     path.rename(path.with_suffix('.error'))
-                    raise
+                    failed.append(name)
                 rich.advance(file_task)
+        if failed:
+            raise RuntimeError(f'analyze failed for: {", ".join(failed)}')
 
     def Mark(self):
         paths = list(self.nas.ActionItems('.tomark'))
         suffix = '.tomark'
+        failed = []
         with RichProgress(
             SpinnerColumn(), TextColumn("{task.description}", table_column=Column(overflow="ellipsis")), _UnitColumn(), BarColumn(), TimeElapsedColumn(), TimeRemainingColumn(),
             console=console, transient=False, refresh_per_second=10
@@ -164,12 +168,15 @@ class Runner:
                 except:
                     logger.exception(f'in marking "{path}":')
                     path.rename(path.with_suffix('.error'))
-                    raise
+                    failed.append(name)
                 rich.advance(file_task)
+        if failed:
+            raise RuntimeError(f'mark failed for: {", ".join(failed)}')
 
     def Cut(self):
         paths = list(self.nas.ActionItems('.tocut'))
         suffix = '.tocut'
+        failed = []
         with RichProgress(
             SpinnerColumn(), TextColumn("{task.description}", table_column=Column(overflow="ellipsis")), _UnitColumn(), BarColumn(), TimeElapsedColumn(), TimeRemainingColumn(),
             console=console, transient=False, refresh_per_second=10
@@ -193,12 +200,15 @@ class Runner:
                 except:
                     logger.exception(f'in cutting "{path}":')
                     path.rename(path.with_suffix('.error'))
-                    raise
+                    failed.append(name)
                 rich.advance(file_task)
+        if failed:
+            raise RuntimeError(f'cut failed for: {", ".join(failed)}')
 
     def Encode(self):
         paths = list(self.nas.ActionItems('.toencode'))
         suffix = '.toencode'
+        failed = []
         with RichProgress(
             SpinnerColumn(), TextColumn("{task.description}", table_column=Column(overflow="ellipsis")), _UnitColumn(), BarColumn(), TimeElapsedColumn(), TimeRemainingColumn(),
             console=console, transient=False, refresh_per_second=10
@@ -223,8 +233,10 @@ class Runner:
                 except:
                     logger.exception(f'in encoding "{path}":')
                     path.rename(path.with_suffix('.error'))
-                    raise
+                    failed.append(name)
                 rich.advance(file_task)
+        if failed:
+            raise RuntimeError(f'encode failed for: {", ".join(failed)}')
 
     def Confirm(self):
         for path in chain(self.nas.ActionItems('.toencode'), self.nas.ActionItems('.toconfirm'), self.nas.ActionItems('.tocleanup')):
