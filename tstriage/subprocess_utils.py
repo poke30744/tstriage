@@ -93,5 +93,9 @@ def run_pipe(cmd: list[str], progress=None):
             progress.flush_stderr()
         if stderr_buffer:
             logger.error(''.join(stderr_buffer).rstrip())
+        # subprocess log output (RichHandler writes to stdout) is only reachable here
+        stdout = ''.join(stdout_chunks).rstrip()
+        if stdout:
+            logger.error(stdout)
         raise RuntimeError(f'Command failed: {cmd[0]} exited with {proc.returncode}')
     return ''.join(stdout_chunks)
