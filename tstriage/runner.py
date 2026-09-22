@@ -258,6 +258,7 @@ class Runner:
         self.SingleInstanceWait()
 
         logger.info(f'running {tasks} ...')
+        failed = []
         for task in tasks:
             try:
                 if task == 'categorize':
@@ -282,6 +283,13 @@ class Runner:
             except FileNotFoundError:
                 logger.warning(f'File not found during {task} task. Please check the configuration and input files.')
                 continue
+            except Exception as e:
+                # A failed item must not stop the remaining tasks: they process the items
+                # that did succeed. Build still fails at the end.
+                logger.error(f'{task} task failed: {e}')
+                failed.append(task)
+        if failed:
+            raise RuntimeError(f'failed task(s): {", ".join(failed)}')
 
 def _expand_env_vars(obj):
     """Recursively expand environment variables in configuration values.

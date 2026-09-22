@@ -6,6 +6,7 @@ import pytest
 
 from tstriage.runner import Runner
 
+
 CONFIG = {
     'Encoder': {},
     'Presets': {},
@@ -47,3 +48,16 @@ def test_analyze_continues_after_a_failed_item(tmp_path):
     assert not (tmp_path / '_tstriage' / 'b.toanalyze').exists()
     assert (tmp_path / '_tstriage' / 'b.tomark').exists()
     assert (tmp_path / '_tstriage' / 'a.toanalyze.error').exists()
+
+
+def test_run_finishes_all_tasks_before_failing(tmp_path):
+    runner = _runner(tmp_path)
+    done = []
+
+    with patch('tstriage.runner.Runner.SingleInstanceWait'), \
+         patch('tstriage.runner.Runner.Analyze', side_effect=RuntimeError('boom')), \
+         patch('tstriage.runner.Runner.Mark', side_effect=lambda: done.append('mark')):
+        with pytest.raises(RuntimeError, match='failed task'):
+            runner.Run(['analyze', 'mark'])
+
+    assert done == ['mark']                              # mark ran despite the failed analyze
