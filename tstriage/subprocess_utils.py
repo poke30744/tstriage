@@ -52,7 +52,9 @@ def run_long(cmd: list[str], progress=None):
 def _run_subprocess(cmd: list[str], progress=None, line_mode: bool = True):
     logger.debug(f'Running: {" ".join(cmd)}')
     try:
-        proc = subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE,
+        # stdout is merged into stderr: child log output (tsmarker's RichHandler writes to
+        # stdout) then reaches the progress buffer and is logged when the command fails.
+        proc = subprocess.Popen(cmd, stdout=subprocess.STDOUT, stderr=subprocess.PIPE,
                                 text=True, encoding='utf-8', errors='replace',
                                 env=_clean_env())
     except FileNotFoundError:
