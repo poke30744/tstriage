@@ -1,8 +1,11 @@
 from functools import cache
 import os, subprocess, json, unicodedata, time, re, copy, shutil
+import logging
 from pathlib import Path
 from typing import Optional
 import yaml
+
+logger = logging.getLogger('tstriage.epg')
 
 def represent_str(dumper, instance):
     if "\n" in instance:
@@ -94,9 +97,32 @@ class EPG:
                         info[k] = item[k]
                     break
         if info == {}:
+            info = self.InfoByStartAt()
+        if info == {}:
             raise RuntimeError(f'"{self.path.name}" is invalid!')
         self.info = info
         return self.info
+
+    def InfoByStartAt(self) -> dict:
+        """Find the entry by service and recording start time instead of by name.
+
+        The broadcaster sometimes renames the running program (an L-shaped news overlay
+        replaces it with "ニュース", for example), so no entry matches the file name.
+        The recording start time is part of the file name, so match on that instead.
+        """
+        match = re.match(r'(\d{4})年(\d{2})月(\d{2})日(\d{2})時(\d{2})分(\d{2})秒', self.path.stem)
+        if match is None:
+            return {}
+        startAt = int(time.mktime(time.strptime(''.join(match.groups()), '%Y%m%d%H%M%S'))) * 1000
+        items = [item for item in self.epg
+                 if item.get('serviceId') == self.ServiceId()
+                 and abs(item.get('startAt', 0) - startAt) <= 60 * 1000]
+        if not items:
+            return {}
+        item = min(items, key=lambda item: abs(item['startAt'] - startAt))
+        name = item.get('name')
+        logger.warning(f'No EPG entry matches "{self.path.stem}"; using "{name}" starting at the same time')
+        return item
 
     @cache
     def ServiceId(self) -> int:
