@@ -14,6 +14,7 @@ class Tee:
     def __init__(self, *pipes, broken_ok: tuple = ()):
         self.pipes = pipes
         self.broken_ok = set(broken_ok)
+        self.broken = set()
 
     def pump(self, stream, buf_size: int = 1024 * 1024, on_chunk=None):
         while chunk := stream.read(buf_size):
@@ -23,16 +24,15 @@ class Tee:
         self.close()
 
     def write(self, data):
-        broken = set()
         for p in self.pipes:
-            if p in broken:
+            if p in self.broken:
                 continue
             try:
                 p.write(data)
             except (BrokenPipeError, OSError):
                 if p in self.broken_ok:
-                    logger.warning('Subtitle process pipe broken — subtitles may not be generated')
-                    broken.add(p)
+                    self.broken.add(p)
+                    logger.debug('Subtitle process exited early (no captions?) — pipe closed, tee skipped')
                 else:
                     raise
 
