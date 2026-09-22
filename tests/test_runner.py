@@ -53,3 +53,16 @@ def test_task_continues_after_a_failed_item(tmp_path, task, suffix, nextSuffix):
     assert not (tmp_path / '_tstriage' / f'b.{suffix}').exists()
     assert (tmp_path / '_tstriage' / f'b.{nextSuffix}').exists()
     assert (tmp_path / '_tstriage' / f'a.{suffix}.error').exists()
+
+
+def test_run_finishes_all_tasks_before_failing(tmp_path):
+    runner = _runner(tmp_path)
+    done = []
+
+    with patch('tstriage.runner.Runner.SingleInstanceWait'), \
+         patch('tstriage.runner.Runner.Index', side_effect=RuntimeError('boom')), \
+         patch('tstriage.runner.Runner.Mark', side_effect=lambda: done.append('mark')):
+        with pytest.raises(RuntimeError, match='failed task'):
+            runner.Run(['index', 'mark'])
+
+    assert done == ['mark']                              # mark ran despite the failed index
