@@ -7,6 +7,22 @@ from .video_info import VideoInfo
 logger = logging.getLogger('tstriage.input_file')
 
 
+def StreamMaps(streamPids: Optional[dict], kinds: tuple[str, ...]) -> list[str]:
+    """`-map` arguments pinning each stream by PID, or [] when unpinned.
+
+    Callers fall back to their own `-map` when this returns nothing, so a file
+    without `serviceId` keeps the exact behaviour it has today.
+    """
+    if not streamPids:
+        return []
+    maps = []
+    for kind in kinds:
+        pid = streamPids.get(kind)
+        if pid is not None:
+            maps += ['-map', f'0:#0x{pid:x}']
+    return maps
+
+
 class InputFile:
     def __init__(self, path: str | Path) -> None:
         self.ffmpeg = shutil.which('ffmpeg')
@@ -39,7 +55,7 @@ class InputFile:
             serviceId = next(p['program_id'] for p in probeInfo['programs'] if p['nb_streams'] > 0),
         )
 
-    def StripTsCmd(self, inFile: str | Path, outFile: str | Path, audioLanguages: list[str] = ['jpn'], fixAudio: bool = False, noMap: bool = False, audio_config: Optional[list[dict]] = None) -> list[str]:
+    def StripTsCmd(self, inFile: str | Path, outFile: str | Path, audioLanguages: list[str] = ['jpn'], fixAudio: bool = False, noMap: bool = False, audio_config: Optional[list[dict]] = None, streamPids: Optional[dict] = None) -> list[str]:
         args = [
             self.ffmpeg, '-hide_banner', '-y',
             '-i', str(inFile),
@@ -53,13 +69,14 @@ class InputFile:
         else:
             args += [ '-c:a', 'copy' ]
         if not noMap:
-            args += [ '-map', '0:v', '-map', '0:a', '-ignore_unknown' ]
+            args += StreamMaps(streamPids, ('video', 'audio')) or [ '-map', '0:v', '-map', '0:a' ]
+            args += [ '-ignore_unknown' ]
             for i in range(len(audioLanguages)):
                 args += [ f'-metadata:s:a:{i}', f'language={audioLanguages[i]}' ]
         args += [ '-f', 'mpegts', outFile ]
         return args
 
-    def EncodeTsCmd(self, inPath: str | Path, outPath: str | Path, preset: dict, encoder: str, crop: Optional[dict] = None, audio_config: Optional[list[dict]] = None, audioLanguages: list[str] = ['jpn']) -> list[str]:
+    def EncodeTsCmd(self, inPath: str | Path, outPath: str | Path, preset: dict, encoder: str, crop: Optional[dict] = None, audio_config: Optional[list[dict]] = None, audioLanguages: list[str] = ['jpn'], streamPids: Optional[dict] = None) -> list[str]:
         videoFilter = preset.get('videoFilter') or ''
         if crop:
             filters = videoFilter.split(',') if videoFilter else []
@@ -110,8 +127,10 @@ class InputFile:
                     break
 
         if has_dual_mono:
-            args += ['-filter_complex', '[0:a]channelsplit=channel_layout=stereo[left][right]']
-            args += ['-map', '0:v', '-map', '[left]', '-map', '[right]']
+            audioLabel = f'0:#0x{streamPids["audio"]:x}' if streamPids and streamPids.get('audio') is not None else '0:a'
+            args += ['-filter_complex', f'[{audioLabel}]channelsplit=channel_layout=stereo[left][right]']
+            args += StreamMaps(streamPids, ('video',)) or ['-map', '0:v']
+            args += ['-map', '[left]', '-map', '[right]']
             args += ['-c:a', 'aac', '-ar', '48000', '-ac', '1', '-b:a', '128k']
             for i in range(2):
                 if i < len(audio_langs):
@@ -124,9 +143,12 @@ class InputFile:
             args += ['-bsf:a', 'aac_adtstoasc']
         else:
             args += [ '-c:a', 'copy', '-bsf:a', 'aac_adtstoasc' ]
-            if audio_config and len(audio_config) == 1:
-                args += [ '-map', '0:v', '-map', '0:a:0', '-ignore_unknown' ]
+            if streamPids:
+                args += StreamMaps(streamPids, ('video', 'audio'))
+            elif audio_config and len(audio_config) == 1:
+                args += [ '-map', '0:v', '-map', '0:a:0' ]
             else:
-                args += [ '-map', '0:v', '-map', '0:a', '-ignore_unknown' ]
+                args += [ '-map', '0:v', '-map', '0:a' ]
+            args += [ '-ignore_unknown' ]
         args += [ outPath ]
         return args

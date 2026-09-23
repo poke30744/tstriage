@@ -25,6 +25,30 @@ def _pq(quiet: bool) -> list[str]:
     return flags
 
 
+def _sid(item: dict[str, Any]) -> list[str]:
+    """Build --service-id for items that pin one service out of the multiplex.
+
+    Without it every tool falls back to ffmpeg's own first-stream choice, which
+    is what an item without `serviceId` has always done.
+    """
+    serviceId = item.get('serviceId')
+    return ['--service-id', str(serviceId)] if serviceId is not None else []
+
+
+def _stream_pids(item: dict[str, Any], path: Path) -> dict[str, Any] | None:
+    """Stream PIDs of the pinned service, or None when the item is not pinned.
+
+    Resolved here rather than carried through the action item: the item file
+    stays exactly what the user wrote, with no derived keys in it.
+    """
+    if item.get('serviceId') is None:
+        return None
+    probe_data = run_json(cli_config.tscutter('probe', '--input', str(path), *_sid(item)))
+    if probe_data is None:
+        raise RuntimeError('tscutter probe failed while resolving stream PIDs')
+    return probe_data.get('streamPids')
+
+
 def Analyze(item: dict[str, Any], epgStation: EPGStation, quiet: bool, progress: SubprocessProgress | None = None):
     path = Path(item['path'])
     destination = Path(item['destination'])
@@ -43,13 +67,14 @@ def Analyze(item: dict[str, Any], epgStation: EPGStation, quiet: bool, progress:
         '--length', str(minSilenceLen),
         '--threshold', str(silenceThresh),
         '--shift', str(splitPosShift),
+        *_sid(item),
     ), progress=progress)
 
     epgPath = destination / '_metadata' / workingPath.with_suffix('.epg').name
     with (progress.status("Extracting EPG") if progress else contextlib.nullcontext()):
         EPG.Dump(workingPath, epgPath, quiet=quiet)
 
-    probe_data = run_json(cli_config.tscutter('probe', '--input', str(workingPath)))
+    probe_data = run_json(cli_config.tscutter('probe', '--input', str(workingPath), *_sid(item)))
     if probe_data is None:
         raise RuntimeError('tscutter probe failed')
 
@@ -64,6 +89,7 @@ def Analyze(item: dict[str, Any], epgStation: EPGStation, quiet: bool, progress:
             *_pq(quiet), 'prepare-subtitles',
             '--input', str(workingPath),
             '--index', str(indexPath),
+            *_sid(item),
         ), progress=progress)
 
     logoPath = (path.parent / '_tstriage' / f'{epg.Channel()}_{probe_data["width"]}x{probe_data["height"]}').with_suffix('.png')
@@ -74,6 +100,7 @@ def Analyze(item: dict[str, Any], epgStation: EPGStation, quiet: bool, progress:
             '--index', str(indexPath),
             '--output', str(logoPath),
             '--max-time', '999999',
+            *_sid(item),
         ), progress=progress)
 
     ffmpeg_path = 'ffmpeg'
@@ -114,7 +141,7 @@ def Mark(item: dict[str, Any], epgStation: EPGStation, quiet: bool, progress: Su
         logger.warning(f'removing {markerPath} ...')
         markerPath.unlink()
 
-    probe_data = run_json(cli_config.tscutter('probe', '--input', str(workingPath)))
+    probe_data = run_json(cli_config.tscutter('probe', '--input', str(workingPath), *_sid(item)))
     if probe_data is None:
         raise RuntimeError('tscutter probe failed in mark task')
     epgPath = destination / '_metadata' / workingPath.with_suffix('.epg').name
@@ -128,6 +155,7 @@ def Mark(item: dict[str, Any], epgStation: EPGStation, quiet: bool, progress: Su
         '--index', str(indexPath),
         '--marker', str(markerPath),
         '--logo', str(logoPath),
+        *_sid(item),
     ), progress=progress)
 
     noEnsemble = item.get('marker', {}).get('noEnsemble', False)
@@ -228,7 +256,9 @@ def Encode(item: dict[str, Any], encoder: str, presets: dict, quiet: bool, progr
         fixAudio=fixAudio,
         noStrip=noStrip,
         quiet=quiet,
-        progress=progress)
+        progress=progress,
+        serviceId=item.get('serviceId'),
+        streamPids=_stream_pids(item, workingPath))
 
     srtPath = destination / 'Subtitles' / workingPath.with_suffix('.srt').name
     if srtPath.exists():

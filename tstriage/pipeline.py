@@ -54,16 +54,17 @@ def _get_program_clips(ptsmap_path: Path, markermap_path: Path, split_num: int, 
     return data['groups']
 
 
-def _detect_crop(inFile: Path, ptsmap_path: Path, quiet: bool) -> dict | None:
+def _detect_crop(inFile: Path, ptsmap_path: Path, quiet: bool, serviceId: int | None = None) -> dict | None:
     with tempfile.TemporaryDirectory(prefix='EncodePipeline_') as td:
         logo_path = Path(td) / (inFile.stem + '_logo.png')
         qflag = ['--quiet'] if quiet else []
+        sflag = ['--service-id', str(serviceId)] if serviceId is not None else []
         subprocess.run(cli_config.tsmarker('extract-logo',
                                            '--input', str(inFile),
                                            '--index', str(ptsmap_path),
                                            '--output', str(logo_path),
                                            '--max-time', '10',
-                                           '--no-remove-border') + qflag, check=True)
+                                           '--no-remove-border') + sflag + qflag, check=True)
         result = subprocess.run(cli_config.tsmarker('crop-detect', '--input', str(logo_path)),
                                 capture_output=True, text=True, check=True)
         if not result.stdout.strip() or result.stdout.strip() == 'null':
@@ -100,7 +101,8 @@ def _start_subtitles_process(out_subtitles: Path, out_file: Path):
 
 def EncodePipeline(inFile: Path, ptsmap_path: Path, markermap_path: Path, outFile: Path, outSubtitles: Path,
                    byGroup: bool, splitNum: int, preset: dict, cropdetect: bool, encoder: str,
-                   fixAudio: bool, noStrip: bool, quiet=False, progress=None):
+                   fixAudio: bool, noStrip: bool, quiet=False, progress=None,
+                   serviceId: int | None = None, streamPids: dict | None = None):
 
     audio_config = _load_audio(outFile.parent / inFile.with_suffix('.yaml').name)
 
@@ -112,7 +114,7 @@ def EncodePipeline(inFile: Path, ptsmap_path: Path, markermap_path: Path, outFil
     n = len(groups)
     logger.info(f'Encoding into {n} file{"s" if n > 1 else ""}')
 
-    crop = _detect_crop(inFile, ptsmap_path, quiet) if cropdetect else None
+    crop = _detect_crop(inFile, ptsmap_path, quiet, serviceId) if cropdetect else None
     inputFile = InputFile(inFile)
 
     for i, clips in enumerate(groups):
@@ -141,7 +143,12 @@ def EncodePipeline(inFile: Path, ptsmap_path: Path, markermap_path: Path, outFil
             if progress is not None:
                 progress.update(encode_tid, bytes_read)
 
-        encode_cmd = inputFile.EncodeTsCmd('-', str(currentOut), preset, encoder, crop, audio_config, ['jpn'])
+        # The strip below already dropped every other service and ffmpeg renumbers the
+        # PIDs it writes, so the encoder's input is a plain single-service TS: index
+        # maps are unambiguous there.  Only the noStrip path feeds the raw TS, where
+        # the PIDs still mean something.
+        encode_cmd = inputFile.EncodeTsCmd('-', str(currentOut), preset, encoder, crop, audio_config, ['jpn'],
+                                           streamPids if noStrip else None)
         encodeP = subprocess.Popen(encode_cmd, stdin=subprocess.PIPE, stdout=subprocess.DEVNULL,
                                    stderr=subprocess.DEVNULL)
 
@@ -161,7 +168,7 @@ def EncodePipeline(inFile: Path, ptsmap_path: Path, markermap_path: Path, outFil
                     Tee(encodeP.stdin, subsP.stdin, broken_ok=(subsP.stdin,)).pump(
                         extractP.stdout, buf_size=1024*1024, on_chunk=_on_chunk)
             else:
-                strip_cmd = inputFile.StripTsCmd('-', '-', ['jpn'], fixAudio=fixAudio, audio_config=audio_config)
+                strip_cmd = inputFile.StripTsCmd('-', '-', ['jpn'], fixAudio=fixAudio, audio_config=audio_config, streamPids=streamPids)
                 stripP = subprocess.Popen(strip_cmd, stdin=subprocess.PIPE, stdout=encodeP.stdin,
                                           stderr=subprocess.DEVNULL)
                 extractP = subprocess.Popen(extract_cmd, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
