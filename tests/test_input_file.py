@@ -135,6 +135,22 @@ def test_strip_ts_cmd_unpinned_keeps_index_maps():
     assert '0:a' in cmd
 
 
+def test_strip_ts_cmd_pipe_probes_past_a_stale_head():
+    """A pipe cannot be seeked, so the probe window is all ffmpeg gets to find
+    the pinned PIDs in — a clip starting on the pre-switch PMT needs more room."""
+    f = InputFile("test.ts")
+    cmd = f.StripTsCmd('-', '-', streamPids={'video': 0x131, 'audio': 0x132})
+    assert '-probesize' in cmd
+    assert '-analyzeduration' in cmd
+
+
+def test_strip_ts_cmd_pipe_unpinned_keeps_ffmpeg_defaults():
+    f = InputFile("test.ts")
+    cmd = f.StripTsCmd('-', '-')
+    assert '-probesize' not in cmd
+    assert '-analyzeduration' not in cmd
+
+
 def test_encode_ts_cmd_pinned():
     f = InputFile("test.ts")
     preset = {'crf': 23, 'videoFilter': ''}

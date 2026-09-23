@@ -56,8 +56,17 @@ class InputFile:
         )
 
     def StripTsCmd(self, inFile: str | Path, outFile: str | Path, audioLanguages: list[str] = ['jpn'], fixAudio: bool = False, noMap: bool = False, audio_config: Optional[list[dict]] = None, streamPids: Optional[dict] = None) -> list[str]:
+        maps = [] if noMap else StreamMaps(streamPids, ('video', 'audio'))
         args = [
             self.ffmpeg, '-hide_banner', '-y',
+        ]
+        if str(inFile) == '-' and maps:
+            # A pipe cannot be seeked, so ffmpeg only knows the streams that turn
+            # up inside its probe window.  The clip that starts at the head of a
+            # multi-service recording carries the pre-switch PMT for several
+            # seconds and the pinned PIDs are not in there yet — probe past it.
+            args += [ '-probesize', '20000000', '-analyzeduration', '15000000' ]
+        args += [
             '-i', str(inFile),
             '-c:v', 'copy'
         ]
@@ -69,7 +78,7 @@ class InputFile:
         else:
             args += [ '-c:a', 'copy' ]
         if not noMap:
-            args += StreamMaps(streamPids, ('video', 'audio')) or [ '-map', '0:v', '-map', '0:a' ]
+            args += maps or [ '-map', '0:v', '-map', '0:a' ]
             args += [ '-ignore_unknown' ]
             for i in range(len(audioLanguages)):
                 args += [ f'-metadata:s:a:{i}', f'language={audioLanguages[i]}' ]
