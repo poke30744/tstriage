@@ -24,6 +24,16 @@ def _pq(quiet: bool) -> list[str]:
     return flags
 
 
+def _sid(item: dict[str, Any]) -> list[str]:
+    """Build --service-id for items that pin one service out of the multiplex.
+
+    Without it every tool falls back to ffmpeg's own first-stream choice, which
+    is what an item without `serviceId` has always done.
+    """
+    serviceId = item.get('serviceId')
+    return ['--service-id', str(serviceId)] if serviceId is not None else []
+
+
 def Encode(item: dict[str, Any], epgStation: EPGStation, encoder: str, presets: dict, quiet: bool, progress: SubprocessProgress | None = None):
     """Step 1: Full-file TS→MKV encode + EPG + YAML + logo + audio check + ASS extraction."""
     path = Path(item['path'])
@@ -67,9 +77,10 @@ def Encode(item: dict[str, Any], epgStation: EPGStation, encoder: str, presets: 
                 fixAudio = True
 
     # 3. Probe original TS for video params
-    probe_data = run_json(cli_config.tscutter('probe', '--input', str(workingPath)))
+    probe_data = run_json(cli_config.tscutter('probe', '--input', str(workingPath), *_sid(item)))
     if probe_data is None:
         raise RuntimeError('tscutter probe failed')
+    streamPids = probe_data.get('streamPids')
 
     # 4. Generate program info YAML
     epg = EPG(epgPath, probe_data['serviceId'], epgStation.GetChannels())
@@ -87,7 +98,8 @@ def Encode(item: dict[str, Any], epgStation: EPGStation, encoder: str, presets: 
     encode_cmd = inputFile.EncodeTsCmd(
         str(workingPath), str(outFile),
         presets[presetName], encoder,
-        fixAudio=fixAudio)
+        fixAudio=fixAudio,
+        streamPids=streamPids)
     if progress is not None:
         info = inputFile.GetInfo()
         progress.add_task("ffmpeg_encode", info.duration, "Encoding", unit="s")
@@ -195,7 +207,7 @@ def Mark(item: dict[str, Any], epgStation: EPGStation, quiet: bool, progress: Su
 
     # Probe original TS for serviceId/channel (MKV has no TS program metadata)
     originalTS = Path(item['path'])
-    probe_data = run_json(cli_config.tscutter('probe', '--input', str(originalTS)))
+    probe_data = run_json(cli_config.tscutter('probe', '--input', str(originalTS), *_sid(item)))
     if probe_data is None:
         raise RuntimeError('tscutter probe failed in mark task')
     epgPath = metadata / workingPath.with_suffix('.epg').name
