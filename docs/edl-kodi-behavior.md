@@ -162,6 +162,113 @@ Type 0 (CUT) 播放时序：
 
 **核心差异不是 seek 精度——两者用的都是 `accurate=true` 的同一套 seek 机制。差异在于 seek 触发之前和解码器恢复之后的帧处理方式。**
 
+## 已知坑：源主机名解析到 IPv6 时，EDL 会被静默跳过
+
+2026-09-23 记录。起因是一台 Google TV Streamer（Kodi 21.2，Android TV 14）的 EDL "突然不加载"，
+而同一批文件、同一个 SMB 共享在 macOS 的 Kodi 上一切正常。
+
+### 症状
+
+完全没有反应：不跳广告；即使打开 debug 日志，**日志里也找不到任何一行 EDL 相关内容**。
+Kodi 依然能在视频旁边列出 `.edl`，甚至能通过它自己的 VFS 把文件读出来（对 `.edl` 调
+`Files.PrepareDownload` 拿到 `/vfs/...` 再 GET，能取到完整内容），说明文件访问、权限、编码、命名
+都没有问题——**是 EDL 那段代码根本没有执行**。
+
+### 根因（Kodi 21 "Omega" 源码）
+
+```cpp
+// Edl.cpp:46
+bool CEdl::ReadEditDecisionLists(const CFileItem& fileItem, const float fFramesPerSecond)
+{
+  const std::string& strMovie = fileItem.GetDynPath();
+  if ((URIUtils::IsHD(strMovie) || URIUtils::IsOnLAN(strMovie, LanCheckMode::ANY_PRIVATE_SUBNET)) &&
+      !URIUtils::IsInternetStream(strMovie))
+  {
+      CLog::Log(LOGDEBUG, "{} - Checking for edit decision lists (EDL) ...");
+      // ReadVideoReDo / ReadEdl / ReadComskip / ReadBeyondTV
+  }
+  else
+  {
+      bFound = ReadPvr(fileItem);   // ← 落到这里，连 .edl 都不会去找
+  }
+```
+
+SMB 源的情况下，全看 `IsOnLAN()`：
+
+```cpp
+// URIUtils.cpp:691
+bool URIUtils::IsHostOnLAN(const std::string& host, LanCheckMode lanCheckMode)
+{
+  // 不带点的主机名当作 NetBIOS 名，直接算本机
+  if (host.find('.') == std::string::npos)
+    return true;                                  // "acepc-gk3" 走这条捷径
+
+  uint32_t address = ntohl(inet_addr(host.c_str()));
+  if (address == INADDR_NONE)
+  {
+    std::string ip;
+    if (CDNSNameCache::Lookup(host, ip))          // "acepc-gk3.local" 在这里被解析
+      address = ntohl(inet_addr(ip.c_str()));     // ← 拿 IPv6 字符串喂 inet_addr() = INADDR_NONE
+  }
+
+  if (address != INADDR_NONE) { /* 192.168/16、10/8、172.16/12 → return true */ }
+  return false;
+}
+```
+
+而 `CDNSNameCache::Lookup()` 解析时不限地址族，**只取第一条结果**：
+
+```cpp
+// DNSNameCache.cpp:39
+hints.ai_family = AF_UNSPEC;
+hints.ai_socktype = SOCK_STREAM;
+if (getaddrinfo(strHostName.c_str(), nullptr, &hints, &res) == 0)
+{
+  strIpAddress = CNetworkBase::GetIpStr(res->ai_addr);   // 第一条，不管 IPv4 还是 IPv6
+  ...
+}
+```
+
+所以只要 `getaddrinfo()` 第一条返回 AAAA（网络里有全局 IPv6 时很常见，RFC 6724 地址选择优先
+IPv6），`inet_addr()` 就解析不了，`address` 停在 `INADDR_NONE`，私有网段判断整段被跳过，
+`IsHostOnLAN()` 返回 false → **旁挂的 .edl 永远不会被看一眼**，而且全程静默、没有任何日志。
+
+触发条件：源里用的是**带点**的主机名（`smb://<host>.local:445/...`），且该名字有 AAAA 记录。
+`acepc-gk3.local` 目前有 4 条 AAAA（`240f:37:fd39:1:...` 公网 + `fdda:1806:...` ULA）和 1 条 A
+（192.168.1.116）；macOS 那台拿到的是 A 记录，Google TV 拿到的是 AAAA。
+
+### 修法
+
+1. **`advancedsettings.xml` 里加 `<hosts>`（首选）**——往 Kodi 的 DNS 缓存里塞静态映射；
+   `CDNSNameCache::Lookup()` 是先查这个缓存、再调 `getaddrinfo()` 的（`DNSNameCache.cpp:57`），
+   IPv6 那条路根本走不到。名字与路径里的主机名是**大小写敏感**的精确匹配（`==`，
+   `DNSNameCache.cpp:88`），改完要重启 Kodi。源路径和媒体库完全不受影响。
+
+   ```xml
+   <advancedsettings>
+     <hosts>
+       <entry name="acepc-gk3.local">192.168.1.116</entry>
+     </hosts>
+   </advancedsettings>
+   ```
+
+2. **源里改用 IP 或不带点的名字**——`smb://192.168.1.116/Seagate 8T/` 按字面 IPv4 解析成功；
+   `smb://acepc-gk3/Seagate 8T/`（无点）命中开头的 `return true`。省事，但路径字符串变了，
+   共享 MySQL 媒体库里的条目会对不上。
+
+3. **让服务器不发布 AAAA**——比如 NAS 上 `avahi-daemon.conf` 里 `use-ipv6=no`。一次修好所有
+   客户端，但要动服务器。
+
+### 这类故障的排查手法
+
+- 打开 debug 日志，找 `"CEdl::ReadEditDecisionLists - Checking for edit decision lists (EDL) on
+  local drive or remote share for: ..."` 这一行。**它完全不出现 = EDL 压根没被考虑**，而不是解析
+  失败。（不开 debug 日志时这行本来就不存在，所以"日志里没有 EDL"什么都证明不了。）
+- Kodi 的 web 服务可以证明文件层没问题：对 `.edl` 调 `Files.PrepareDownload`，再 GET 返回的
+  `/vfs/...`。（顺带：`special://` 路径会被 401 拒绝。）
+- 播放带 action-0（CUT）EDL 的文件时读 `Player.GetProperties(["totaltime"])` 是很快的行为验证：
+  切片生效时，报出来的总时长会比容器时长明显短。
+
 ## 对 tstriage 的影响
 
 当前 tstriage 输出 type 3（COMM_BREAK）。改为 type 0（CUT）可以消除 Kodi 中的多余帧闪现。
