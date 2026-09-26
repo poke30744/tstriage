@@ -86,6 +86,7 @@ Key packages: tscutter, tsmarker, ffmpeg-python, PyYAML, psutil, pysubs2.
 
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
+| `serviceId` | int | — | Pin processing to one service (`program_number`) out of the multiplex; top-level key, not nested |
 | `preset` | string | `"drama"` | Encode preset name |
 | `fixaudio` | bool | — | Audio resample fix (auto-set by encode audio check) |
 

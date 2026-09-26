@@ -27,6 +27,27 @@ def _actionItem(tmpPath: Path, stem: str, suffix: str) -> Path:
     return path
 
 
+def test_list_inherits_service_id_from_the_folder_settings(tmp_path):
+    runner = _runner(tmp_path)
+    _actionItem(tmp_path, 'a', 'categorized')
+    (tmp_path / 'dest' / 'tstriage.json').write_text(json.dumps({'serviceId': 182}), encoding='utf-8')
+
+    runner.List()
+
+    item = json.loads((tmp_path / '_tstriage' / 'a.toencode').read_text(encoding='utf-8'))
+    assert item['serviceId'] == 182
+
+
+def test_list_leaves_an_unset_service_id_unpinned(tmp_path):
+    runner = _runner(tmp_path)
+    _actionItem(tmp_path, 'a', 'categorized')
+
+    runner.List()
+
+    item = json.loads((tmp_path / '_tstriage' / 'a.toencode').read_text(encoding='utf-8'))
+    assert item['serviceId'] is None
+
+
 @pytest.mark.parametrize('task, suffix, nextSuffix', [
     ('Encode', 'toencode', 'toindex'),
     ('Index', 'toindex', 'tomark'),
