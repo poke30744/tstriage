@@ -102,6 +102,7 @@ class Runner:
                 newItem = {
                     'path': item['path'],
                     'destination': item['destination'],
+                    'serviceId': settings.get('serviceId'),
                     'cutter': settings.get('cutter', {}),
                     'marker': settings.get('marker', {}),
                     'encoder': settings.get('encoder', {})

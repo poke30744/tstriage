@@ -88,6 +88,7 @@ Key packages: tscutter, tsmarker, ffmpeg-python, PyYAML, psutil, pysubs2.
 
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
+| `serviceId` | int | — | Pin processing to one service (`program_number`) out of the multiplex; top-level key, not nested |
 | `noStt` | bool | `false` | Skip speech-to-text in analyze |
 | `preset` | string | `"drama"` | Encode preset name |
 | `bygroup` | bool | `false` | Each clip group → separate MKV |
