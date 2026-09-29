@@ -89,8 +89,6 @@ def run_pipe(cmd: list[str], progress=None):
 
     if proc.returncode != 0:
         logger.error(f'Command failed (exit {proc.returncode}): {" ".join(cmd)}')
-        if progress is not None:
-            progress.flush_stderr()
         if stderr_buffer:
             logger.error(''.join(stderr_buffer).rstrip())
         # subprocess log output (RichHandler writes to stdout) is only reachable here

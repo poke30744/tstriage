@@ -45,7 +45,6 @@ class SubprocessProgress:
         self.ctx = ctx
         self._tasks: dict[str, dict] = {}
         self._is_tty = sys.stderr.isatty()
-        self._stderr: list[str] = []
         self._status_task = None
         self._last_log_ctx = ""
         # In non-TTY mode (Jenkins), use text fallback even if RichProgress is passed
@@ -107,7 +106,11 @@ class SubprocessProgress:
 
     def feed(self, line: str):
         if not line.startswith("PROGRESS:"):
-            self._stderr.append(line)
+            # Anything else on the child's stderr is its own log output, and the only
+            # record of what it did — that speech-to-text decoded a clip again from
+            # further back, say.  Log it as it arrives: keeping it back until the
+            # command failed meant a run that succeeded said nothing about it.
+            logger.info(line)
             return
         try:
             data = json.loads(line[len("PROGRESS:"):])
@@ -117,12 +120,6 @@ class SubprocessProgress:
         if tid not in self._tasks:
             self._tasks[tid] = self._register(tid, data)
         self._update(tid, data)
-
-    def flush_stderr(self):
-        """Output collected stderr lines (call on command failure)."""
-        for line in self._stderr:
-            sys.stderr.write(line + '\n')
-        self._stderr.clear()
 
     def _register(self, tid: str, data: dict) -> dict:
         info = {
