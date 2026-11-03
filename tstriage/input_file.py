@@ -59,6 +59,10 @@ class InputFile:
         maps = [] if noMap else StreamMaps(streamPids, ('video', 'audio'))
         args = [
             self.ffmpeg, '-hide_banner', '-y',
+            # A corrupt AAC packet decodes into a bogus multichannel frame whose
+            # rematrix is impossible, aborting the fixaudio re-encode mid-stream;
+            # drop demuxer-flagged corrupt packets instead of feeding them on.
+            '-fflags', '+discardcorrupt',
         ]
         if str(inFile) == '-' and maps:
             # A pipe cannot be seeked, so ffmpeg only knows the streams that turn

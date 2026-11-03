@@ -58,6 +58,15 @@ def test_strip_ts_cmd_fix_audio():
     assert "aac" in cmd
 
 
+def test_strip_ts_cmd_discards_corrupt_packets():
+    """A corrupt AAC packet can decode into a bogus multichannel frame that kills
+    the fixaudio filter chain, so the demuxer must drop flagged corrupt packets."""
+    f = InputFile("test.ts")
+    cmd = f.StripTsCmd("in.ts", "out.ts", fixAudio=True)
+    assert cmd[cmd.index('-fflags') + 1] == '+discardcorrupt'
+    assert cmd.index('-fflags') < cmd.index('-i')
+
+
 def test_strip_ts_cmd_nomap():
     f = InputFile("test.ts")
     cmd = f.StripTsCmd("in.ts", "out.ts", noMap=True)

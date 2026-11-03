@@ -1,4 +1,4 @@
-import json, logging, shutil, subprocess, tempfile
+import json, logging, os, shutil, subprocess, tempfile
 from pathlib import Path
 import pysubs2
 import yaml
@@ -8,6 +8,15 @@ from .subprocess_utils import run_json
 from .tee import Tee
 
 logger = logging.getLogger('tstriage.pipeline')
+
+
+def _tail(stream, limit: int = 4000) -> str:
+    """Last bytes of a child's captured stderr, for failure messages."""
+    stream.flush()
+    stream.seek(0, os.SEEK_END)
+    size = stream.tell()
+    stream.seek(max(0, size - limit))
+    return stream.read().decode('utf-8', errors='replace').strip()
 
 
 def _load_audio(yaml_path: Path) -> list[dict] | None:
@@ -149,42 +158,58 @@ def EncodePipeline(inFile: Path, ptsmap_path: Path, markermap_path: Path, outFil
         # the PIDs still mean something.
         encode_cmd = inputFile.EncodeTsCmd('-', str(currentOut), preset, encoder, crop, audio_config, ['jpn'],
                                            streamPids if noStrip else None)
-        encodeP = subprocess.Popen(encode_cmd, stdin=subprocess.PIPE, stdout=subprocess.DEVNULL,
-                                   stderr=subprocess.DEVNULL)
+        # Each child's stderr goes to a temp file: a PIPE that nobody reads deadlocks
+        # the child once full, and DEVNULL (the old behaviour) reduced every failure
+        # to an unexplained BrokenPipeError from the tee.
+        with tempfile.TemporaryFile() as encode_err, \
+                tempfile.TemporaryFile() as strip_err, \
+                tempfile.TemporaryFile() as extract_err:
+            encodeP = subprocess.Popen(encode_cmd, stdin=subprocess.PIPE, stdout=subprocess.DEVNULL,
+                                       stderr=encode_err)
+            stripP = None
+            pipe_broken = False
+            with encodeP:
+                subsP = _start_subtitles_process(outSubtitles, currentOut)
 
-        with encodeP:
-            subsP = _start_subtitles_process(outSubtitles, currentOut)
+                extract_cmd = cli_config.tsmarker('extract-clips',
+                                                  '--input', str(inFile),
+                                                  '--index', str(ptsmap_path),
+                                                  '--clips', json.dumps(clips))
+                if quiet:
+                    extract_cmd.append('--quiet')
 
-            extract_cmd = cli_config.tsmarker('extract-clips',
-                                              '--input', str(inFile),
-                                              '--index', str(ptsmap_path),
-                                              '--clips', json.dumps(clips))
-            if quiet:
-                extract_cmd.append('--quiet')
+                try:
+                    if noStrip:
+                        extractP = subprocess.Popen(extract_cmd, stdout=subprocess.PIPE, stderr=extract_err)
+                        with subsP, extractP:
+                            Tee(encodeP.stdin, subsP.stdin, broken_ok=(subsP.stdin,)).pump(
+                                extractP.stdout, buf_size=1024*1024, on_chunk=_on_chunk)
+                    else:
+                        strip_cmd = inputFile.StripTsCmd('-', '-', ['jpn'], fixAudio=fixAudio, audio_config=audio_config, streamPids=streamPids)
+                        stripP = subprocess.Popen(strip_cmd, stdin=subprocess.PIPE, stdout=encodeP.stdin,
+                                                  stderr=strip_err)
+                        extractP = subprocess.Popen(extract_cmd, stdout=subprocess.PIPE, stderr=extract_err)
+                        with stripP, subsP, extractP:
+                            Tee(stripP.stdin, subsP.stdin, broken_ok=(subsP.stdin,)).pump(
+                                extractP.stdout, buf_size=1024*1024, on_chunk=_on_chunk)
+                except BrokenPipeError:
+                    # One of the children died; the returncodes below say which one,
+                    # and its captured stderr says why.
+                    pipe_broken = True
 
-            if noStrip:
-                extractP = subprocess.Popen(extract_cmd, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
-                with subsP, extractP:
-                    Tee(encodeP.stdin, subsP.stdin, broken_ok=(subsP.stdin,)).pump(
-                        extractP.stdout, buf_size=1024*1024, on_chunk=_on_chunk)
-            else:
-                strip_cmd = inputFile.StripTsCmd('-', '-', ['jpn'], fixAudio=fixAudio, audio_config=audio_config, streamPids=streamPids)
-                stripP = subprocess.Popen(strip_cmd, stdin=subprocess.PIPE, stdout=encodeP.stdin,
-                                          stderr=subprocess.DEVNULL)
-                extractP = subprocess.Popen(extract_cmd, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
-                with stripP, subsP, extractP:
-                    Tee(stripP.stdin, subsP.stdin, broken_ok=(subsP.stdin,)).pump(
-                        extractP.stdout, buf_size=1024*1024, on_chunk=_on_chunk)
-                if stripP.returncode != 0:
-                    raise RuntimeError(f'ffmpeg strip failed (exit {stripP.returncode})')
-
+            failures = []
             if extractP.returncode != 0:
-                raise RuntimeError(f'tsmarker extract-clips failed (exit {extractP.returncode})')
+                failures.append(f'tsmarker extract-clips failed (exit {extractP.returncode}):\n{_tail(extract_err)}')
+            if stripP is not None and stripP.returncode != 0:
+                failures.append(f'ffmpeg strip failed (exit {stripP.returncode}):\n{_tail(strip_err)}')
+            if encodeP.returncode != 0:
+                failures.append(f'ffmpeg encode failed (exit {encodeP.returncode}):\n{_tail(encode_err)}')
             if subsP.returncode != 0:
-                raise RuntimeError(f'Caption2AssC failed (exit {subsP.returncode})')
-
-        if encodeP.returncode != 0:
-            raise RuntimeError(f'ffmpeg encode failed (exit {encodeP.returncode})')
+                failures.append(f'Caption2AssC failed (exit {subsP.returncode})')
+            if failures:
+                raise RuntimeError('\n'.join(failures))
+            if pipe_broken:
+                raise RuntimeError('a child process closed its pipe without exiting non-zero')
 
         if progress is not None:
             progress.done(encode_tid)
